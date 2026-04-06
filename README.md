@@ -2,6 +2,8 @@
 
 This is my take on a fork of Breadboard Simulator, I noticed the program was missing a few features I wanted to use in my Electronics Course, so I created this fork to add them.
 
+## [Download Here](https://mohamed-ibrahim-asu.github.io/bbsim/Breadboard_Sim.zip)
+
 # Additions
 ## Components
 ### Input Devices - Function Generator
@@ -10,6 +12,7 @@ This is my take on a fork of Breadboard Simulator, I noticed the program was mis
 ※ When using the function generator, make sure the function generator is grounded and the simulation speed is low enough to allow for proper generation of the functions. 
 
 ※ Ideally 5x the maximum frequency is what I recommend. 
+
 ※ 10x should be the absolute maximum; any faster and the shape will be significantly distorted.  
 ### New Components
 **As used in our Electronics Lab:**
