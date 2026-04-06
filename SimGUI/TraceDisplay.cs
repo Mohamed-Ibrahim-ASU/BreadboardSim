@@ -1,95 +1,130 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Shapes;
-using System.Diagnostics;
+
 namespace SimGUI
 {
     class TraceDisplay : FrameworkElement
     {
         private List<Brush> TraceBrushes = new List<Brush>();
+        private List<Pen> TracePens = new List<Pen>(); 
+        private List<bool> TraceIsCurrent = new List<bool>(); // Tracks the domain
         private VisualCollection visualChildren;
 
         public TraceDisplay()
         {
             visualChildren = new VisualCollection(this);
         }
-        //Removes all traces
+
         public void Reset()
         {
             visualChildren.Clear();
             TraceBrushes.Clear();
+            TracePens.Clear();
+            TraceIsCurrent.Clear();
         }
-        //Adds a trace to the end of the list of traces
-        public void AddTrace(Brush brush)
+
+        public void AddTrace(Brush brush, bool isCurrent = false)
         {
             visualChildren.Add(new DrawingVisual());
             TraceBrushes.Add(brush);
+            TraceIsCurrent.Add(isCurrent);
+            
+            Pen newPen = CreatePen(brush, isCurrent);
+            TracePens.Add(newPen);
         }
-        //Updates the set of points for a trace
+        
+        public void UpdateTraceBrush(int traceNumber, Brush newBrush)
+        {
+            if (traceNumber >= 0 && traceNumber < TraceBrushes.Count)
+            {
+                TraceBrushes[traceNumber] = newBrush;
+                Pen updatedPen = CreatePen(newBrush, TraceIsCurrent[traceNumber]);
+                TracePens[traceNumber] = updatedPen;
+            }
+        }
+
+        // Helper method to generate the distinct styles
+        private Pen CreatePen(Brush baseBrush, bool isCurrent)
+        {
+            Pen p;
+            if (isCurrent)
+            {
+                // Current: Thick, slightly translucent, rounded "marker" style
+                Brush currentBrush = baseBrush.Clone();
+                currentBrush.Opacity = 0.55; 
+                currentBrush.Freeze();
+                
+                p = new Pen(currentBrush, 2.5);
+            }
+            else
+            {
+                // Voltage: Crisp, solid, thin line
+                p = new Pen(baseBrush, 2.0);
+            }
+
+            // Rounding the caps and joins makes signal spikes look much better
+            p.StartLineCap = PenLineCap.Round;
+            p.EndLineCap = PenLineCap.Round;
+            p.LineJoin = PenLineJoin.Round;
+            p.Freeze();
+            
+            return p;
+        }
+
         public void SetTracePoints(int traceNumber, List<Point> points)
         {
             if (traceNumber < visualChildren.Count)
             {
                 DrawingVisual traceVisual = (DrawingVisual)visualChildren[traceNumber];
-                DrawingContext traceContext = traceVisual.RenderOpen();
-                Pen pen = new Pen(TraceBrushes[traceNumber], 2);
-                pen.Freeze();
-                StreamGeometry streamGeo = new StreamGeometry();
-                StreamGeometryContext streamGeoCtx = streamGeo.Open();
 
-                if (points.Count > 1)
+                using (DrawingContext traceContext = traceVisual.RenderOpen())
                 {
-                    double lastX = points[0].X;
-                    double lastY = points[0].Y;
-                    streamGeoCtx.BeginFigure(points[0], false, false);
-                    List<Point> linePoints = new List<Point>(); 
-                    for (int i = 1; i < points.Count; i++)
+                    if (points.Count > 1)
                     {
-                        if ((Math.Abs(lastX - points[i].X) > 0.5) || (Math.Abs(lastY - points[i].Y) > 100))
+                        StreamGeometry streamGeo = new StreamGeometry();
+                        using (StreamGeometryContext ctx = streamGeo.Open())
                         {
-                            lastX = points[i].X;
-                            lastY = points[i].Y;
-                            if (points[i].X < 0)
-                            {
-                                Point endPoint = new Point();
-                                endPoint.Y = points[i].Y;
-                                endPoint.X = 0;
-                                linePoints.Add(endPoint);
-                                break;
+                            bool figureOpen = false;
 
-                            }
-                            else
+                            for (int i = 0; i < points.Count; i++)
                             {
-                                linePoints.Add(points[i]);
-                            }
+                                Point p = points[i];
 
+                                // NaN sentinel = restart boundary, lift the pen
+                                if (double.IsNaN(p.X) || double.IsNaN(p.Y))
+                                {
+                                    figureOpen = false;
+                                    continue;
+                                }
+
+                                // Clamp to left edge as before
+                                if (p.X < 0)
+                                    p = new Point(0, p.Y);
+
+                                if (!figureOpen)
+                                {
+                                    ctx.BeginFigure(p, false, false);
+                                    figureOpen = true;
+                                }
+                                else
+                                {
+                                    ctx.LineTo(p, true, false);
+                                }
+
+                                // Stop drawing past the left edge
+                                if (p.X <= 0)
+                                    break;
+                            }
                         }
 
+                        streamGeo.Freeze();
+                        traceContext.DrawGeometry(null, TracePens[traceNumber], streamGeo);
                     }
-                    streamGeoCtx.PolyLineTo(linePoints, true, false);
                 }
-                      
-
-                streamGeoCtx.Close();
-                streamGeo.Freeze();
-                traceContext.DrawGeometry(null, pen, streamGeo);
-
-                traceContext.Close();
             }
-
-
         }
-
         protected override int VisualChildrenCount
         {
             get { return visualChildren.Count; }

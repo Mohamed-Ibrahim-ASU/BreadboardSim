@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -13,20 +13,17 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
-using System.Globalization;
 using System.Reflection;
+using System.Text.RegularExpressions;
+
 namespace SimGUI
 {
-    /// <summary>
-    /// Interaction logic for MainWindow.xaml
-    /// </summary>
     public partial class MainWindow : Window
     {
-
         private double CurrentZoomFactor = 1;
         private const double ZoomFactorDelta = 0.25;
 
-        private System.Windows.Threading.DispatcherTimer UpdateTimer = new System.Windows.Threading.DispatcherTimer();
+        private System.Windows.Threading.DispatcherTimer UpdateTimer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Render);
         private int NumberOfUpdates = 0;
 
         public string SelectedTool = "SELECT";
@@ -39,8 +36,21 @@ namespace SimGUI
 
         //Path to last opened file
         private string LastOpenedFile = null;
+        private string LastCircuitState = "";
 
         public Simulator CurrentSimulator = new Simulator();
+        
+        // Hover Tooltips
+        private Border CustomTooltip;
+        private TextBlock CustomTooltipText;
+        private Dictionary<string, string> GlobalNativeCache = new Dictionary<string, string>(); 
+        
+        private Point lastMousePos = new Point(-100, -100);
+        private DateTime lastHoverTime = DateTime.MinValue;
+        private string lastRenderedText = "";
+        private bool isManuallyStopped = true; 
+        private Rect lastHitBox = Rect.Empty; 
+        
         
         //List of required files
         private readonly string[] ApplicationResources = {
@@ -74,7 +84,8 @@ namespace SimGUI
                                                "res/tools/wire.cur",
                                                "res/tools/wire.png"
                                            };
-        private GraphView CurrentGraph = null;
+
+        public GraphView CurrentGraph = null;
 
         public MainWindow()
         {
@@ -86,7 +97,7 @@ namespace SimGUI
                 System.IO.Directory.SetCurrentDirectory(AppDomain.CurrentDomain.BaseDirectory);
                 if (!System.IO.Directory.Exists("res/"))
                 {
-                    MessageBox.Show("The directory containing the resources needed by this application is missing. Please check your installation.", "Application Error", MessageBoxButton.OK,MessageBoxImage.Error);
+                    MessageBox.Show("The directory containing the resources needed by this application is missing.", "Application Error", MessageBoxButton.OK,MessageBoxImage.Error);
                     Application.Current.Shutdown();
                 }
             }
@@ -94,33 +105,60 @@ namespace SimGUI
             string missingResource = "";
             if (CheckForMissingResources(ref missingResource))
             {
-                MessageBox.Show("The resource \"" + missingResource + "\" is missing. Please check your installation.", "Application Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("The resource \"" + missingResource + "\" is missing.", "Application Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 Application.Current.Shutdown();
             }
 
             circuit = new Circuit(this);
-           // AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
             App.Current.DispatcherUnhandledException += Current_DispatcherUnhandledException;
             InitializeComponent();
+            
+            Style hiddenToolTipStyle = new Style(typeof(ToolTip));
+            hiddenToolTipStyle.Setters.Add(new Setter(UIElement.VisibilityProperty, Visibility.Collapsed));
+            hiddenToolTipStyle.Setters.Add(new Setter(UIElement.OpacityProperty, 0.0));
+            DrawArea.Resources.Add(typeof(ToolTip), hiddenToolTipStyle);
+            
+            CustomTooltipText = new TextBlock {
+                Foreground = Brushes.Black,
+                Margin = new Thickness(6),
+                FontSize = 12,
+                FontWeight = FontWeights.SemiBold
+            };
+            
+            CustomTooltip = new Border {
+                Background = new SolidColorBrush(Color.FromArgb(245, 255, 255, 230)), 
+                BorderBrush = Brushes.DimGray,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(4),
+                IsHitTestVisible = false, 
+                Visibility = Visibility.Hidden,
+                Child = CustomTooltipText
+            };
+            
+            Canvas.SetZIndex(CustomTooltip, 99999);
+            DrawArea.Children.Add(CustomTooltip);
 
-            TreeViewItem customResistor = new TreeViewItem();
+            ToolTipService.SetIsEnabled(DrawArea, false);
+            DrawArea.AddHandler(FrameworkElement.ToolTipOpeningEvent, new ToolTipEventHandler((s, e) => {
+                e.Handled = true; 
+            }), true);
+
+            DrawArea.MouseMove += DrawArea_MouseMove;
+            DrawArea.MouseLeave += (s, e) => {
+                CustomTooltip.Visibility = Visibility.Hidden;
+                lastHitBox = Rect.Empty;
+            };
 
             PopulateMenu(Devices_Resistors, Constants.E6, 0, 7, "Ω Resistor", "Resistor");
-
-            TreeViewItem customCapacitor = new TreeViewItem();
-
             PopulateMenu(Devices_Capacitors, Constants.E3, -10, -7, "F Capacitor", "Capacitor");
             PopulateMenu(Devices_ElectroCapacitors, Constants.E3, -6, -3, "F Capacitor", "Electrolytic Capacitor");
 
             PopulateMenuWithModels(Devices_DigitalIC, "Integrated Circuit", "res/models/ics.xml", "Digital");
             PopulateMenuWithModels(Devices_AnalogIC, "Integrated Circuit", "res/models/ics.xml", "Analog");
-
             PopulateMenuWithModels(Devices_Diodes, "Diode", "res/models/diodes.xml");
             PopulateMenuWithModels(Devices_NPN, "NPN Transistor", "res/models/transistors.xml","npn");
             PopulateMenuWithModels(Devices_PNP, "PNP Transistor", "res/models/transistors.xml", "pnp");
             PopulateMenuWithModels(Devices_NMOS, "N-channel MOSFET", "res/models/transistors.xml", "nmos");
-
-
             PopulateMenuWithModels(Devices_Output, "LED", "res/models/leds.xml", null, " LED");
             PopulateMenuWithModels(Devices_Output, "7-Segment Display", "res/models/7seg.xml", null);
 
@@ -136,6 +174,11 @@ namespace SimGUI
             ldr_item.Header = ldr;
             Devices_Input.Items.Add(ldr_item);
 
+            ComponentData function_generator = new ComponentData("Function Generator", 1.0, "Function Generator");
+
+            TreeViewItem function_generator_item = new TreeViewItem();
+            function_generator_item.Header = function_generator;
+            Devices_Input.Items.Add(function_generator_item);
 
             ComponentData spdt_switch = new ComponentData("SPDT Switch", 0, "SPDT Switch");
 
@@ -157,27 +200,655 @@ namespace SimGUI
 
             DevicePicker.Items.Add(probe_item);
 
+            ComponentData diffProbe = new ComponentData("DiffProbe", 0, "Differential Voltage Probe");
+
+            TreeViewItem diffProbe_item = new TreeViewItem();
+            diffProbe_item.Header = diffProbe;
+            DevicePicker.Items.Add(diffProbe_item);
+
+            ComponentData currentProbe = new ComponentData("CurrentProbe", 0, "Current Probe (Ammeter)");
+
+            TreeViewItem currentProbe_item = new TreeViewItem();
+            currentProbe_item.Header = currentProbe;
+            DevicePicker.Items.Add(currentProbe_item);
+
             SetNumberOfBreadboards(1);
 
-            UpdateTimer.Interval = TimeSpan.FromMilliseconds(50);
+            // PERFORMANCE FIX: Decreased from 50ms to 16ms to achieve a smooth 60 FPS refresh rate
+            UpdateTimer.Interval = TimeSpan.FromMilliseconds(16);
             UpdateTimer.Tick += SimUpdate;
 
             SelectTool("SELECT");
 
             string[] args = Environment.GetCommandLineArgs();
             
-            if (args.Length > 1)
+            if (args.Length > 1 && System.IO.File.Exists(args[1]))
             {
-                if (System.IO.File.Exists(args[1]))
-                {
-                    circuit.ClearUndoQueue();
-                    circuit.LoadCircuit(args[1]);
-                    LastOpenedFile = args[1];
-                    Title = "Breadboard Simulator - " + System.IO.Path.GetFileNameWithoutExtension(args[1]);
-                }
+                circuit.ClearUndoQueue();
+                circuit.LoadCircuit(args[1]);
+                LastOpenedFile = args[1];
+                Title = "Breadboard Simulator (MI) - " + System.IO.Path.GetFileNameWithoutExtension(args[1]);
             }
+            
             PopulateSamplesMenu(File_Samples, "res/samples");
         }
+
+        private string GetPinName(Component c, int pinNumber)
+        {
+            string typeName = c.GetType().Name.ToLower();
+            string compName = c.ComponentType.ToLower();
+            string model = c.ComponentModel != null ? c.ComponentModel.ToLower() : "";
+
+            if (typeName.Contains("transistor") || compName.Contains("transistor"))
+            {
+                if (compName.Contains("mosfet")) {
+                    if (pinNumber == 1) return "Source";
+                    if (pinNumber == 2) return "Gate";
+                    if (pinNumber == 3) return "Drain";
+                } 
+                else if (model.ToLower().Contains("bc639")) { 
+                    if (pinNumber == 1) return "Emitter";   
+                    if (pinNumber == 2) return "Collector"; 
+                    if (pinNumber == 3) return "Base";      
+                } 
+                else {
+                    if (pinNumber == 1) return "Emitter";
+                    if (pinNumber == 2) return "Base";
+                    if (pinNumber == 3) return "Collector";
+                }
+            }
+            else if (typeName.Contains("potentiometer") || compName.Contains("potentiometer"))
+            {
+                if (pinNumber == 1) return "Terminal 1";
+                if (pinNumber == 2) return "Wiper";
+                if (pinNumber == 3) return "Terminal 2";
+            }
+            else if (typeName.Contains("diode") || compName.Contains("diode") || typeName.Contains("led"))
+            {
+                if (pinNumber == 1) return "Anode";
+                if (pinNumber == 2) return "Cathode";
+            }
+            else if (typeName.Contains("capacitor") || compName.Contains("capacitor"))
+            {
+                if (compName.Contains("electrolytic")) {
+                    if (pinNumber == 1) return "Anode (+)";
+                    if (pinNumber == 2) return "Cathode (-)";
+                }
+            }
+            else if (typeName.Contains("function") || compName.Contains("function"))
+            {
+                if (pinNumber == 1) return "Positive (+)";
+                if (pinNumber == 2) return "Negative (-)";
+            }
+            else if (model.Contains("555"))
+            {
+                switch (pinNumber) {
+                    case 1: return "Ground";
+                    case 2: return "Trigger";
+                    case 3: return "Output";
+                    case 4: return "Reset";
+                    case 5: return "Control";
+                    case 6: return "Threshold";
+                    case 7: return "Discharge";
+                    case 8: return "VCC";
+                }
+            }
+            else if (model.Contains("741") || model.Contains("lm358") || model.Contains("lm324") || model.Contains("opamp"))
+            {
+                 switch(pinNumber) {
+                     case 2: return "Inv. Input (-)";
+                     case 3: return "Non-Inv. Input (+)";
+                     case 4: return "V-";
+                     case 6: return "Output";
+                     case 7: return "V+";
+                 }
+            }
+
+            return "Pin " + pinNumber;
+        }
+
+        private string ExtractPercentage(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return "";
+            int pIndex = text.IndexOf('%');
+            if (pIndex <= 0) return "";
+            
+            int start = pIndex - 1;
+            while (start >= 0 && (char.IsDigit(text[start]) || text[start] == '.')) 
+            {
+                start--;
+            }
+            start++;
+            if (start < pIndex) return text.Substring(start, pIndex - start + 1);
+            return "";
+        }
+
+        private void DrawArea_MouseMove(object sender, MouseEventArgs e)
+        {
+            Point currentPos = e.GetPosition(DrawArea);
+            
+            if (Math.Abs(currentPos.X - lastMousePos.X) < 2 && Math.Abs(currentPos.Y - lastMousePos.Y) < 2) 
+            {
+                if ((DateTime.Now - lastHoverTime).TotalMilliseconds < 30) return;
+            }
+            
+            lastMousePos = currentPos;
+            lastHoverTime = DateTime.Now;
+
+            UpdateHoverBox(currentPos);
+        }
+
+private void UpdateHoverBox(Point mousePos)
+        {
+            if (circuit == null) return;
+
+            DependencyObject hitElement = null;
+            VisualTreeHelper.HitTest(DrawArea, null, new HitTestResultCallback(result =>
+            {
+                if (result.VisualHit is FrameworkElement fe && fe.IsHitTestVisible)
+                {
+                    hitElement = result.VisualHit;
+                    return HitTestResultBehavior.Stop;
+                }
+                return HitTestResultBehavior.Continue;
+            }), new PointHitTestParameters(mousePos));
+
+            if (hitElement == null)
+            {
+                CustomTooltip.Visibility = Visibility.Hidden;
+                lastRenderedText = "";
+                lastHitBox = Rect.Empty;
+                return;
+            }
+
+            object rawTooltip = null;
+            Component parentComponent = null;
+            Wire parentWire = null;
+            int pinNumber = -1;
+
+            DependencyObject curr = hitElement;
+            while (curr != null && curr != DrawArea)
+            {
+                if (curr is FrameworkElement fe)
+                {
+                    if (fe.ToolTip != null && rawTooltip == null) 
+                    {
+                        rawTooltip = fe.ToolTip; 
+                    }
+                    if (fe.Name != null && fe.Name.StartsWith("pin") && pinNumber == -1)
+                    {
+                        int.TryParse(fe.Name.Substring(3), out pinNumber); 
+                    }
+                }
+                
+                if (curr is Component c) parentComponent = c;
+                if (curr is Wire w) parentWire = w;
+                
+                curr = VisualTreeHelper.GetParent(curr);
+            }
+
+            if ((parentComponent != null || parentWire != null) && hitElement is FrameworkElement hitFE && hitFE != DrawArea)
+            {
+                try {
+                    lastHitBox = hitFE.TransformToAncestor(DrawArea).TransformBounds(new Rect(0, 0, hitFE.ActualWidth, hitFE.ActualHeight));
+                } catch {
+                    lastHitBox = Rect.Empty;
+                }
+            }
+            else
+            {
+                lastHitBox = Rect.Empty;
+            }
+
+            string devTip = "";
+            if (rawTooltip is string s) devTip = s;
+            else if (rawTooltip is TextBlock tb) devTip = tb.Text;
+            else if (rawTooltip is ToolTip tt)
+            {
+                if (tt.Content is string tts) devTip = tts;
+                else if (tt.Content is TextBlock ttb) devTip = ttb.Text;
+            }
+
+            string livePotPct = "";
+            if (parentComponent != null && parentComponent.ComponentType.ToLower().Contains("potentiometer"))
+            {
+                object compTip = parentComponent.ToolTip;
+                string compTipStr = "";
+                if (compTip is string c_s) compTipStr = c_s;
+                else if (compTip is TextBlock c_tb) compTipStr = c_tb.Text;
+                else if (compTip is ToolTip c_tt)
+                {
+                    if (c_tt.Content is string c_tts) compTipStr = c_tts;
+                    else if (c_tt.Content is TextBlock c_ttb) compTipStr = c_ttb.Text;
+                }
+                
+                livePotPct = ExtractPercentage(compTipStr);
+            }
+
+            
+            // We now strictly separate the Body cache from the Pin cache so hovering a pin 
+            // doesn't overwrite the Transistor's main text.
+            string cacheKey = "";
+            if (parentComponent != null)
+            {
+                cacheKey = parentComponent.ID + (pinNumber == -1 ? "_body" : $"_pin_{pinNumber}");
+            }
+
+            if (CurrentSimulator.SimRunning && !string.IsNullOrEmpty(cacheKey) && !string.IsNullOrEmpty(devTip))
+            {
+                 GlobalNativeCache[cacheKey] = devTip;
+            }
+
+            if ((string.IsNullOrEmpty(devTip) || !CurrentSimulator.SimRunning) && !string.IsNullOrEmpty(cacheKey) && GlobalNativeCache.ContainsKey(cacheKey))
+            {
+                devTip = GlobalNativeCache[cacheKey];
+                
+                if (pinNumber == -1 && !string.IsNullOrEmpty(livePotPct))
+                {
+                    string oldPct = ExtractPercentage(devTip);
+                    if (!string.IsNullOrEmpty(oldPct)) {
+                        devTip = devTip.Replace(oldPct, livePotPct);
+                    }
+                }
+            }
+
+            string finalText = string.IsNullOrEmpty(devTip) && parentComponent != null ? parentComponent.ID : devTip;
+            bool simHasData = CurrentSimulator != null && CurrentSimulator.Results != null && CurrentSimulator.GetNumberOfTicks() > 0;
+
+            if (parentComponent != null)
+            {
+                if (parentComponent is DiffProbe dp)
+                {
+                    if (simHasData && dp.ConnectedNets.ContainsKey(1) && dp.ConnectedNets.ContainsKey(2))
+                    {
+                        int v1Id = CurrentSimulator.GetNetVoltageVarId(dp.ConnectedNets[1]);
+                        int v2Id = CurrentSimulator.GetNetVoltageVarId(dp.ConnectedNets[2]);
+                        if (v1Id != -1 && v2Id != -1)
+                        {
+                            double v1 = CurrentSimulator.GetValueOfVar(v1Id, 0);
+                            double v2 = CurrentSimulator.GetValueOfVar(v2Id, 0);
+                            
+                            Quantity q1 = new Quantity("v", "V", "V") { Val = v1 };
+                            Quantity q2 = new Quantity("v", "V", "V") { Val = v2 };
+                            Quantity vDrop = new Quantity("v", "Voltage Drop", "V") { Val = v1 - v2 };
+                            
+                            finalText = $"Differential Probe\nRed Node (+): {q1.ToFixedString()}\nBlack Node (-): {q2.ToFixedString()}\nVoltage Drop: {vDrop.ToFixedString()}";
+                        }
+                    }
+                    else
+                    {
+                        finalText = "Differential Probe\n(Connect both leads)";
+                    }
+                }
+                else if (parentComponent is CurrentProbe cp)
+                {
+                    if (simHasData && cp.TargetComponentId != null)
+                    {
+                        int cId = CurrentSimulator.GetComponentPinCurrentVarId(cp.TargetComponentId, cp.TargetPinNumber);
+                        if (cId != -1)
+                        {
+                            double iVal = Math.Abs(CurrentSimulator.GetValueOfVar(cId, 0));
+                            Quantity qI = new Quantity("i", "Current", "A") { Val = iVal };
+                            finalText = $"Current Probe (-> {cp.TargetComponentId} Pin {cp.TargetPinNumber})\nCurrent: {qI.ToFixedString()}";
+                        }
+                    }
+                    else
+                    {
+                        finalText = "Current Probe\n(Place on top of a component leg)";
+                    }
+                }
+                else
+                {
+                    string lowerText = finalText.ToLower();
+                    bool devProvidedVoltage = Regex.IsMatch(finalText, @"-?\d+(\.\d+)?\s*[kMmuµnp]?V", RegexOptions.IgnoreCase);
+                    bool devProvidedCurrent = Regex.IsMatch(finalText, @"-?\d+(\.\d+)?\s*[kMmuµnp]?A", RegexOptions.IgnoreCase) || lowerText.Contains("current:");
+                    string typeNameStr = parentComponent.GetType().Name.ToLower();
+                    string compNameStr = parentComponent.ComponentType.ToLower();
+
+                    if (pinNumber != -1)
+                    {
+                        string pName = GetPinName(parentComponent, pinNumber);
+                        
+                        bool devAlreadyNamedIt = lowerText.Contains("emitter") || lowerText.Contains("collector") || lowerText.Contains("base") || 
+                                                 lowerText.Contains("anode") || lowerText.Contains("cathode") || lowerText.Contains("gate") || 
+                                                 lowerText.Contains("drain") || lowerText.Contains("source") || lowerText.Contains("wiper") ||
+                                                 lowerText.Contains("terminal");
+                        
+                        if (!devAlreadyNamedIt)
+                        {
+                            if (finalText.StartsWith("Pin " + pinNumber))
+                            {
+                                finalText = finalText.Substring(("Pin " + pinNumber).Length).Trim();
+                            }
+                            if (!lowerText.Contains(pName.ToLower()))
+                            {
+                                finalText = string.IsNullOrEmpty(finalText) ? $"[{pName}]" : $"[{pName}]\n" + finalText;
+                            }
+                        }
+                    }
+
+                    if (simHasData)
+                    {
+                        bool isPot = compNameStr.Contains("potentiometer");
+                        double potR1 = 0.001, potR2 = 0.001;
+                        double potV1 = 0, potVW = 0, potV2 = 0;
+                        bool potValid = false;
+
+                        if (isPot)
+                        {
+                            double rTotal = parentComponent.ComponentValue.Val;
+                            double wiperRatio = 0.5;
+                            
+                            string pctSource = !string.IsNullOrEmpty(livePotPct) ? livePotPct : devTip;
+                            Match mPct = Regex.Match(pctSource, @"(\d+(\.\d+)?)%");
+                            if (mPct.Success) {
+                                wiperRatio = double.Parse(mPct.Groups[1].Value) / 100.0;
+                                if (wiperRatio < 0) wiperRatio = 0;
+                                if (wiperRatio > 1) wiperRatio = 1;
+                            }
+                            
+                            potR1 = Math.Max(rTotal * wiperRatio, 1e-3);
+                            potR2 = Math.Max(rTotal * (1.0 - wiperRatio), 1e-3);
+                            
+                            if (parentComponent.ConnectedNets != null && 
+                                parentComponent.ConnectedNets.ContainsKey(1) && 
+                                parentComponent.ConnectedNets.ContainsKey(2) && 
+                                parentComponent.ConnectedNets.ContainsKey(3))
+                            {
+                                int v1Id = CurrentSimulator.GetNetVoltageVarId(parentComponent.ConnectedNets[1]);
+                                int vWId = CurrentSimulator.GetNetVoltageVarId(parentComponent.ConnectedNets[2]);
+                                int v2Id = CurrentSimulator.GetNetVoltageVarId(parentComponent.ConnectedNets[3]);
+                                
+                                if (v1Id != -1 && vWId != -1 && v2Id != -1)
+                                {
+                                    potV1 = CurrentSimulator.GetValueOfVar(v1Id, 0);
+                                    potVW = CurrentSimulator.GetValueOfVar(vWId, 0);
+                                    potV2 = CurrentSimulator.GetValueOfVar(v2Id, 0);
+                                    potValid = true;
+                                }
+                            }
+                        }
+
+                        bool isVoltageSource = typeNameStr.Contains("generator") || compNameStr.Contains("generator") || parentComponent is Probe;
+
+                        if (parentComponent is Probe p && p.ConnectedNets.ContainsKey(1))
+                        {
+                            int varId = CurrentSimulator.GetNetVoltageVarId(p.ConnectedNets[1]);
+                            if (varId != -1)
+                            {
+                                Quantity netVolt = new Quantity("v", "v", "V");
+                                netVolt.Val = CurrentSimulator.GetValueOfVar(varId, 0);
+                                finalText = $"Oscilloscope Probe\nVoltage: {netVolt.ToFixedString()}";
+                            }
+                        }
+                        else
+                        {
+                            int pinCount = parentComponent.GetPinPositions().Count;
+                            bool isSimple2Pin = (pinCount <= 2);
+
+                            if (pinNumber != -1) 
+                            {
+                                if (!devProvidedVoltage && parentComponent.ConnectedNets != null && parentComponent.ConnectedNets.ContainsKey(pinNumber))
+                                {
+                                    int vId = CurrentSimulator.GetNetVoltageVarId(parentComponent.ConnectedNets[pinNumber]);
+                                    if (vId != -1)
+                                    {
+                                        Quantity pVolt = new Quantity("v", "v", "V");
+                                        pVolt.Val = CurrentSimulator.GetValueOfVar(vId, 0);
+                                        if (!string.IsNullOrEmpty(finalText)) finalText += "\n";
+                                        finalText += $"Voltage: {pVolt.ToFixedString()}";
+                                    }
+                                }
+
+                                if (!devProvidedCurrent)
+                                {
+                                    int currentVarId = CurrentSimulator.GetComponentPinCurrentVarId(parentComponent.ID, pinNumber);
+                                    if (currentVarId != -1)
+                                    {
+                                        Quantity compCurrent = new Quantity("i", "Current", "A");
+                                        compCurrent.Val = Math.Abs(CurrentSimulator.GetValueOfVar(currentVarId, 0));
+                                        if (!string.IsNullOrEmpty(finalText)) finalText += "\n";
+                                        finalText += $"Current: {compCurrent.ToFixedString()}";
+                                    }
+                                    else if (isPot && potValid)
+                                    {
+                                        double iLeg = 0;
+                                        if (pinNumber == 1) iLeg = (potV1 - potVW) / potR1;
+                                        else if (pinNumber == 3) iLeg = (potV2 - potVW) / potR2;
+                                        else if (pinNumber == 2) iLeg = -((potV1 - potVW) / potR1 + (potV2 - potVW) / potR2);
+                                        
+                                        Quantity compCurrent = new Quantity("i", "Current", "A");
+                                        compCurrent.Val = Math.Abs(iLeg);
+                                        if (!string.IsNullOrEmpty(finalText)) finalText += "\n";
+                                        finalText += $"Current: {compCurrent.ToFixedString()}";
+                                    }
+                                    else if (compNameStr.Contains("integrated") || typeNameStr.Contains("ic"))
+                                    {
+                                        if (!string.IsNullOrEmpty(finalText)) finalText += "\n";
+                                        finalText += "Current: N/A (IC Node)";
+                                    }
+                                }
+                            }
+                            else 
+                            {
+                                if (isSimple2Pin)
+                                {
+                                    string voltageDropText = "";
+                                    if (!isVoltageSource && parentComponent.ConnectedNets != null && parentComponent.ConnectedNets.ContainsKey(1) && parentComponent.ConnectedNets.ContainsKey(2))
+                                    {
+                                        int v1Id = CurrentSimulator.GetNetVoltageVarId(parentComponent.ConnectedNets[1]);
+                                        int v2Id = CurrentSimulator.GetNetVoltageVarId(parentComponent.ConnectedNets[2]);
+                                        if (v1Id != -1 && v2Id != -1)
+                                        {
+                                            double v1 = CurrentSimulator.GetValueOfVar(v1Id, 0);
+                                            double v2 = CurrentSimulator.GetValueOfVar(v2Id, 0);
+                                            Quantity vDrop = new Quantity("v", "Voltage Drop", "V");
+                                            vDrop.Val = Math.Abs(v1 - v2);
+                                            if (!finalText.Contains("Voltage Drop")) voltageDropText = $"\nVoltage Drop: {vDrop.ToFixedString()}";
+                                        }
+                                    }
+
+                                    if (!devProvidedCurrent)
+                                    {
+                                        int currentVarId = CurrentSimulator.GetComponentPinCurrentVarId(parentComponent.ID, 1);
+                                        if (currentVarId != -1)
+                                        {
+                                            Quantity compCurrent = new Quantity("i", "Current", "A");
+                                            compCurrent.Val = Math.Abs(CurrentSimulator.GetValueOfVar(currentVarId, 0));
+                                            if (!string.IsNullOrEmpty(finalText)) finalText += "\n";
+                                            finalText += $"Current: {compCurrent.ToFixedString()}";
+                                        }
+                                    }
+                                    finalText += voltageDropText; 
+                                }
+                                else if (pinCount <= 4)
+                                {
+                                if (isPot)
+                                    {
+                                        // Use pctSource instead of devTip to guarantee we have the live, animated percentage
+                                        string pctSource = !string.IsNullOrEmpty(livePotPct) ? livePotPct : devTip;
+                                        Match mPct = Regex.Match(pctSource, @"(\d+(\.\d+)?)%");
+                                        
+                                        if (mPct.Success) 
+                                        {
+                                            // Calculate the physical resistance split
+                                            double wRatio = double.Parse(mPct.Groups[1].Value) / 100.0;
+                                            if (wRatio < 0) wRatio = 0;
+                                            if (wRatio > 1) wRatio = 1;
+                                            
+                                            double rTotal = parentComponent.ComponentValue.Val;
+                                            
+                                            Quantity r1Q = new Quantity("r", "R1", "Ω") { Val = rTotal * wRatio };
+                                            Quantity r2Q = new Quantity("r", "R2", "Ω") { Val = rTotal * (1.0 - wRatio) };
+                                            
+                                            double p1 = wRatio * 100.0;
+                                            double p2 = (1.0 - wRatio) * 100.0;
+
+                                            // Only add the "Position:" line if it isn't already hiding at the top of the tooltip
+                                            if (!finalText.Contains(mPct.Groups[0].Value)) {
+                                                finalText += $"\nPosition: {mPct.Groups[0].Value}";
+                                            }
+                                            
+                                            finalText += $"\nT1 ↔ Wiper: {r1Q.ToFixedString()} ({p1:0.#}%)";
+                                            finalText += $"\nWiper ↔ T2: {r2Q.ToFixedString()} ({p2:0.#}%)";
+                                        }
+
+                                        if (potValid)
+                                        {
+                                            Quantity vDrop = new Quantity("v", "Voltage Drop (T1-T2)", "V");
+                                            vDrop.Val = Math.Abs(potV1 - potV2);
+                                            if (!finalText.Contains("Voltage Drop (T1-T2)")) finalText += $"\nVoltage Drop (T1-T2): {vDrop.ToFixedString()}";
+                                        }
+                                    }
+
+                                    if (!devProvidedCurrent || isPot)
+                                    {
+                                        if (!finalText.Contains("--- Pin Data ---")) finalText += "\n\n--- Pin Data ---";
+                                        
+                                        foreach (int pNum in parentComponent.GetPinPositions().Keys)
+                                        {
+                                            string pName = GetPinName(parentComponent, pNum);
+                                            string pData = $"\n{pName}:";
+                                            
+                                            if (parentComponent.ConnectedNets != null && parentComponent.ConnectedNets.ContainsKey(pNum))
+                                            {
+                                                int vId = CurrentSimulator.GetNetVoltageVarId(parentComponent.ConnectedNets[pNum]);
+                                                if (vId != -1)
+                                                {
+                                                    Quantity pVolt = new Quantity("v", "v", "V");
+                                                    pVolt.Val = CurrentSimulator.GetValueOfVar(vId, 0);
+                                                    pData += $" {pVolt.ToFixedString()}";
+                                                }
+                                            }
+                                            
+                                            int currentVarId = CurrentSimulator.GetComponentPinCurrentVarId(parentComponent.ID, pNum);
+                                            if (currentVarId != -1)
+                                            {
+                                                Quantity compCurrent = new Quantity("i", "Current", "A");
+                                                compCurrent.Val = Math.Abs(CurrentSimulator.GetValueOfVar(currentVarId, 0));
+                                                pData += $" | {compCurrent.ToFixedString()}";
+                                            }
+                                            else if (isPot && potValid)
+                                            {
+                                                double iLeg = 0;
+                                                if (pNum == 1) iLeg = (potV1 - potVW) / potR1;
+                                                else if (pNum == 3) iLeg = (potV2 - potVW) / potR2;
+                                                else if (pNum == 2) iLeg = -((potV1 - potVW) / potR1 + (potV2 - potVW) / potR2);
+                                                
+                                                Quantity compCurrent = new Quantity("i", "Current", "A");
+                                                compCurrent.Val = Math.Abs(iLeg);
+                                                pData += $" | {compCurrent.ToFixedString()}";
+                                            }
+                                            else
+                                            {
+                                                pData += " | N/A (Internal)";
+                                            }
+                                            
+                                            finalText += pData;
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    if (!string.IsNullOrEmpty(finalText)) finalText += "\n";
+                                    finalText += "(Hover specific pins to view details)";
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            else if (parentWire != null)
+            {
+                finalText = "Wire";
+                if (simHasData && parentWire.NetName != null)
+                {
+                    int varId = CurrentSimulator.GetNetVoltageVarId(parentWire.NetName);
+                    if (varId != -1)
+                    {
+                        Quantity netVolt = new Quantity("v", "v", "V");
+                        netVolt.Val = CurrentSimulator.GetValueOfVar(varId, 0);
+                        finalText = $"Wire\nVoltage: {netVolt.ToFixedString()}"; 
+                    }
+                }
+            }
+
+            if (!string.IsNullOrEmpty(finalText))
+            {
+                string cleanText = finalText.Trim();
+                
+                if (lastRenderedText != cleanText)
+                {
+                    CustomTooltipText.Text = cleanText;
+                    lastRenderedText = cleanText;
+                }
+                
+                CustomTooltip.Visibility = Visibility.Visible;
+                CustomTooltip.RenderTransform = new ScaleTransform(1.0 / CurrentZoomFactor, 1.0 / CurrentZoomFactor);
+                Canvas.SetLeft(CustomTooltip, mousePos.X + (15.0 / CurrentZoomFactor));
+                Canvas.SetTop(CustomTooltip, mousePos.Y + (15.0 / CurrentZoomFactor));
+            }
+            else
+            {
+                CustomTooltip.Visibility = Visibility.Hidden;
+                lastRenderedText = "";
+            }
+        }
+        private string GetCircuitState()
+    {
+    double valSum = 0;
+    int geoHash = 0;
+    foreach (var c in circuit.Components)
+    {
+        geoHash ^= Canvas.GetLeft(c).GetHashCode();
+        geoHash ^= Canvas.GetTop(c).GetHashCode();
+        geoHash ^= c.ID.GetHashCode();
+        if (c.ComponentModel != null)
+            geoHash ^= c.ComponentModel.GetHashCode();
+
+        string type = c.GetType().Name;
+
+        // Function generator parameters require a full sim restart to take effect
+        // because simbe.exe has no live pipe command for waveform/frequency changes.
+        // Potentiometer, LDR, and Switch are excluded because they use SendChangeMessage
+        // and a restart would cause the lag/straight-line bug.
+        if (type == "FunctionGenerator")
+        {
+            try
+            {
+                var t = c.GetType();
+                string[] targetNames = { "Amplitude", "Offset", "Waveform", "Frequency", "DutyCycle" };
+                foreach (string target in targetNames)
+                {
+                    var field = t.GetField(target, BindingFlags.Public | BindingFlags.Instance);
+                    if (field != null)
+                    {
+                        var v = field.GetValue(c);
+                        if (v != null) geoHash ^= v.ToString().GetHashCode();
+                    }
+                    var prop = t.GetProperty(target, BindingFlags.Public | BindingFlags.Instance);
+                    if (prop != null)
+                    {
+                        var v = prop.GetValue(c, null);
+                        if (v != null) geoHash ^= v.ToString().GetHashCode();
+                    }
+                }
+            }
+            catch { }
+        }
+
+        if (type != "Switch" && type != "Potentiometer" && type != "LDR"
+            && type != "CurrentProbe" && type != "DiffProbe" && type != "Probe")
+        {
+            valSum += c.ComponentValue.Val;
+        }
+    }
+    foreach (var w in circuit.Wires)
+    {
+        if (w.NetName != null) geoHash ^= w.NetName.GetHashCode();
+    }
+    return $"{circuit.Components.Count}_{circuit.Wires.Count}_{valSum}_{geoHash}_{circuit.PositiveRailVoltage}";
+}
 
         private void PopulateSamplesMenu(MenuItem rootItem, string rootPath)
         {
@@ -192,41 +863,50 @@ namespace SimGUI
             }
             foreach (string file in System.IO.Directory.EnumerateFiles(rootPath,"*.bbrd"))
             {
-                string fileName = System.IO.Path.GetFileName(file);
-
                 MenuItem menuItem = new MenuItem();
                 menuItem.Header = System.IO.Path.GetFileNameWithoutExtension(file);
                 menuItem.Click += sampleMenuItem_Click;
                 rootItem.Items.Add(menuItem);
-
             }
+        }
+
+        private void PrepareForNewFile()
+        {
+            if (CurrentGraph != null)
+            {
+                CurrentGraph.Close();
+                CurrentGraph = null;
+            }
+            circuit.ClearUndoQueue();
+            circuit.ClearCircuit(); 
+            GlobalNativeCache.Clear(); 
+            CustomTooltip.Visibility = Visibility.Hidden;
         }
 
         private void sampleMenuItem_Click(object sender, RoutedEventArgs e)
         {
-            if(sender is MenuItem) {
+            if(sender is MenuItem) 
+            {
                 StopSimulation.Command.Execute(null);
                 if (DisplaySaveChangesDialog())
                 {
                     MenuItem item = (MenuItem) sender;
                     string fileName = item.Header.ToString() + ".bbrd";
                     item = (MenuItem)item.Parent;
-
                     while (item != File_Samples)
                     {
                         fileName = item.Header.ToString() + "/" + fileName;
-                        if (!(item.Parent is MenuItem))
-                            break;
+                        if (!(item.Parent is MenuItem)) break;
                         item = (MenuItem)item.Parent;
                     }
                     fileName = "res/samples/" + fileName;
                     LastOpenedFile = null;
-                    circuit.ClearUndoQueue();
+                    
+                    PrepareForNewFile();
                     circuit.LoadCircuit(fileName);
-                    Title = "Breadboard Simulator - " + System.IO.Path.GetFileNameWithoutExtension(fileName);
+                    Title = "Breadboard Simulator (MI) - " + System.IO.Path.GetFileNameWithoutExtension(fileName);
                 }
             }
-
         }
 
         private bool CheckForMissingResources(ref string missingResource)
@@ -244,100 +924,77 @@ namespace SimGUI
 
         private void Current_DispatcherUnhandledException(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e)
         {
-
             try
             {
-                string debugMessage = e.Exception.Message;
                 e.Handled = true;
-
-                MessageBoxResult r = MessageBox.Show("An internal error has occurred. It may be possible to continue running, but the internal state may be corrupted so it is reccommended that you save your work and restart"
-                    + " the application.\r\nWould you like to continue running? (pressing No will exit.)\r\n\r\nDebug information: "
-                    + debugMessage + "\r\n\r\nPlease report this error, together with a brief description of what you were doing at the time it occurred" +
-                    " to David Shah <dave@ds0.me>", "Internal Error", MessageBoxButton.YesNo, MessageBoxImage.Error);
+                MessageBoxResult r = MessageBox.Show("An internal error has occurred. Would you like to continue running?\r\n\r\n"
+                    + e.Exception.Message, "Internal Error", MessageBoxButton.YesNo, MessageBoxImage.Error);
 
                 if (r == MessageBoxResult.No)
                 {
-                    if (CurrentSimulator != null)
+                    if (CurrentSimulator != null && CurrentSimulator.SimRunning)
                     {
-                        if (CurrentSimulator.SimRunning)
-                        {
-                            try
-                            {
-                                CurrentSimulator.SimProcess.Kill();
-                            }
-                            catch
-                            {
-
-                            }
-                        }
+                        try { CurrentSimulator.SimProcess.Kill(); }
+                        catch { }
                     }
                     Application.Current.Shutdown();
                 }
-
             }
             catch
             {
-                if (CurrentSimulator != null)
+                if (CurrentSimulator != null && CurrentSimulator.SimRunning)
                 {
-                    if (CurrentSimulator.SimRunning)
-                    {
-                        try
-                        {
-                            CurrentSimulator.SimProcess.Kill();
-                        }
-                        catch
-                        {
-
-                        }
-                    }
+                    try { CurrentSimulator.SimProcess.Kill(); }
+                    catch { }
                 }
-                try
-                {
-                    Application.Current.Shutdown();
-
-                }
-                catch
-                {
-
-                }
+                try { Application.Current.Shutdown(); }
+                catch { }
             }
         }
 
-
         private void SimUpdate(object sender, EventArgs e)
         {
+            string currentState = GetCircuitState();
+            if (currentState != LastCircuitState && LastCircuitState != "")
+            {
+                StartSimulation(true); 
+                return; 
+            }
 
             if (CurrentSimulator.SimRunning)
             {
-                CurrentSimulator.Update();
-                //Graphing may fail with too few points
-                if (CurrentSimulator.GetNumberOfTicks() >= 5)
+                int newLines = CurrentSimulator.Update();
+                if (newLines > 0 && CurrentSimulator.Results != null && CurrentSimulator.GetNumberOfTicks() >= 5 && CurrentGraph != null)
                 {
-                    if (CurrentGraph != null)
-                    {
-                        CurrentGraph.PlotAll();
-                    }
+                    CurrentGraph.PlotAll();
                 }
 
                 NumberOfUpdates++;
-
+                
                 foreach (var component in circuit.Components)
-                    component.UpdateFromSimulation(NumberOfUpdates, CurrentSimulator,SimulationEvent.TICK);
-                Quantity netVolt = new Quantity("v", "v", "V");
-
-                foreach (var wire in circuit.Wires)
                 {
-                    int varId = CurrentSimulator.GetNetVoltageVarId(wire.NetName);
-                    if (varId != -1)
+                    component.UpdateFromSimulation(NumberOfUpdates, CurrentSimulator,SimulationEvent.TICK);
+                    
+                    object tip = component.ToolTip;
+                    string tipStr = "";
+                    if (tip is string s) tipStr = s;
+                    else if (tip is TextBlock tb) tipStr = tb.Text;
+                    else if (tip is ToolTip tt)
                     {
-                        netVolt.Val = CurrentSimulator.GetValueOfVar(varId, 0);
-                        wire.ToolTip = netVolt.ToFixedString();
+                        if (tt.Content is string tts) tipStr = tts;
+                        else if (tt.Content is TextBlock ttb) tipStr = ttb.Text;
                     }
-                    else {
-                        wire.ToolTip = "";
+                    if (!string.IsNullOrEmpty(tipStr))
+                    {
+                        GlobalNativeCache[component.ID + "_body"] = tipStr;
                     }
                 }
-                //Run every second
+                
+                if (DrawArea.IsMouseOver)
+                {
+                    UpdateHoverBox(lastMousePos);
+                }
+                
                 if ((NumberOfUpdates % 20) == 0)
                 {
                     Quantity simulationTime = new Quantity("t", "Simulation Time", "s");
@@ -347,62 +1004,155 @@ namespace SimGUI
             }
             else
             {
-                StatusText.Text = "Ready";
-                NumberOfUpdates = 0;
-                UpdateTimer.Stop();
-
+                if (isManuallyStopped)
+                {
+                    StatusText.Text = "Ready";
+                    NumberOfUpdates = 0;
+                    UpdateTimer.Stop();
+                    CustomTooltip.Visibility = Visibility.Hidden;
+                }
+                else
+                {
+                    StatusText.Text = "Simulation Error (0Ω Short?). Adjust slider to auto-resume...";
+                }
             }
-
-            Util.DoEvents();
+            // PERFORMANCE FIX: Util.DoEvents() was completely removed from here. 
+            // It caused layout/rendering stutter when placed inside a WPF Timer loop.
         }
         
-        //Starts the simulator and initialises the GraphView
-        private void StartSimulation()
+        private void StartSimulation(bool seamless = false)
         {
-            if (CurrentSimulator.SimRunning)
-                CurrentSimulator.Stop();
-            if (UpdateTimer.IsEnabled)
-                UpdateTimer.Stop();
-            string netlist = circuit.GetNetlist();
-            NumberOfUpdates = 0;
-            CurrentSimulator.Start(netlist, circuit.SimulationSpeed.Val);
+            isManuallyStopped = false;
+            double oldTime = 0;
+            if (seamless && CurrentSimulator != null) 
+            {
+                oldTime = CurrentSimulator.GetCurrentTime();
+            }
+
+            if (CurrentSimulator.SimRunning) CurrentSimulator.Stop();
+            if (!seamless && UpdateTimer.IsEnabled) UpdateTimer.Stop();
+                
+            string rawNetlist = circuit.GetNetlist();
+            LastCircuitState = GetCircuitState(); 
+            
+            if (!seamless)
+            {
+                 NumberOfUpdates = 0;
+                 GlobalNativeCache.Clear(); 
+            }
+            
+            CurrentSimulator.Start(rawNetlist, circuit.SimulationSpeed.Val, seamless);
+            
             if (CurrentSimulator.SimRunning)
             {
                 while (!CurrentSimulator.VarNamesPopulated)
                 {
                     CurrentSimulator.Update();
-                    if (!CurrentSimulator.SimRunning)
-                        return;
+                    if (!CurrentSimulator.SimRunning) return;
                 }
+                
                 StatusText.Text = "Interactive Simulation Running";
-                if (CurrentGraph != null)
-                {
-                    CurrentGraph.ResetAll();
+                
+                if (CurrentGraph != null) 
+                { 
+                    if (!seamless) CurrentGraph.ResetAll(); 
                 }
-                else
+                else if (!seamless)
                 {
                     CurrentGraph = new GraphView();
                     CurrentGraph.SecPerDiv.Val = circuit.SimulationSpeed.Val;
                 }
 
-                CurrentGraph.StartSim(CurrentSimulator);
+                if (CurrentGraph != null)
+                {
+                    CurrentGraph.StartSim(CurrentSimulator);
+                }
+
                 foreach (Component c in circuit.Components)
+                {
                     c.UpdateFromSimulation(0, CurrentSimulator, SimulationEvent.STARTED);
+                }
 
                 int numberOfTraces = 0;
-                foreach (Probe p in circuit.Components.OfType<Probe>())
+                
+                if (seamless && CurrentGraph != null) 
                 {
-                    Trace t = new Trace();
-                    if (CurrentGraph.AddTrace(p.ID, CurrentSimulator.GetNetVoltageVarId(p.ConnectedNets[1]), ref t))
+                    foreach (Probe p in circuit.Components.OfType<Probe>()) 
                     {
-                        numberOfTraces++;
-                        p.SetProbeColour(t.TraceBrush);
+                        int varId = p.ConnectedNets.ContainsKey(1) ? CurrentSimulator.GetNetVoltageVarId(p.ConnectedNets[1]) : -1;
+                        CurrentGraph.UpdateTraceMapping(p.ID, varId);
+                    }
+                } 
+                else 
+                {
+                    foreach (Probe p in circuit.Components.OfType<Probe>())
+                    {
+                        Trace t = new Trace();
+                        int varId = p.ConnectedNets.ContainsKey(1) ? CurrentSimulator.GetNetVoltageVarId(p.ConnectedNets[1]) : -1;
+                        
+                        if (CurrentGraph != null && CurrentGraph.AddTrace(p.ID, varId, ref t))
+                        {
+                            numberOfTraces++; p.SetProbeColour(t.TraceBrush);
+                        }
                     }
                 }
-                if(numberOfTraces > 0)
-                    CurrentGraph.Show();
-                UpdateTimer.Start();
 
+                if (seamless && CurrentGraph != null) 
+                {
+                    foreach (DiffProbe dp in circuit.Components.OfType<DiffProbe>()) 
+                    {
+                        int v1 = dp.ConnectedNets.ContainsKey(1) ? CurrentSimulator.GetNetVoltageVarId(dp.ConnectedNets[1]) : -1;
+                        int v2 = dp.ConnectedNets.ContainsKey(2) ? CurrentSimulator.GetNetVoltageVarId(dp.ConnectedNets[2]) : -1;
+                        CurrentGraph.UpdateTraceMapping(dp.ID, v1, v2);
+                    }
+                } 
+                else 
+                {
+                    foreach (DiffProbe dp in circuit.Components.OfType<DiffProbe>())
+                    {
+                        Trace t = new Trace();
+                        int v1 = dp.ConnectedNets.ContainsKey(1) ? CurrentSimulator.GetNetVoltageVarId(dp.ConnectedNets[1]) : -1;
+                        int v2 = dp.ConnectedNets.ContainsKey(2) ? CurrentSimulator.GetNetVoltageVarId(dp.ConnectedNets[2]) : -1;
+                        Brush savedColor = dp.ProbeColour;
+                        
+                        if (CurrentGraph != null && CurrentGraph.AddTrace(dp.ID, v1, v2, ref t))
+                        {
+                            numberOfTraces++; 
+                            if (savedColor != Brushes.Transparent) CurrentGraph.UpdateTraceMapping(dp.ID, v1, v2, savedColor);
+                            else dp.SetProbeColour(t.TraceBrush); 
+                        }
+                    }
+                }
+
+                if (seamless && CurrentGraph != null) 
+                {
+                    foreach (CurrentProbe cp in circuit.Components.OfType<CurrentProbe>()) 
+                    {
+                        cp.BindTarget(circuit);
+                        int varId = CurrentSimulator.GetComponentPinCurrentVarId(cp.TargetComponentId, cp.TargetPinNumber);
+                        CurrentGraph.UpdateTraceMapping(cp.ID, varId);
+                    }
+                } 
+                else 
+                {
+                    foreach (CurrentProbe cp in circuit.Components.OfType<CurrentProbe>())
+                    {
+                        cp.BindTarget(circuit);
+                        Trace t = new Trace();
+                        int varId = CurrentSimulator.GetComponentPinCurrentVarId(cp.TargetComponentId, cp.TargetPinNumber);
+                        Brush savedColor = cp.ProbeColour;
+                        
+                        if (CurrentGraph != null && CurrentGraph.AddTrace(cp.ID, varId, ref t))
+                        {
+                            numberOfTraces++; 
+                            if (savedColor != Brushes.Transparent) CurrentGraph.UpdateTraceMapping(cp.ID, varId, -1, savedColor);
+                            else cp.SetProbeColour(t.TraceBrush); 
+                        }
+                    }
+                }
+                
+                if(numberOfTraces > 0 && CurrentGraph != null && !CurrentGraph.IsVisible) CurrentGraph.Show();
+                if (!UpdateTimer.IsEnabled) UpdateTimer.Start();
             }
         }
 
@@ -469,11 +1219,16 @@ namespace SimGUI
             }
             else if (newNumberOfBreadboards < currentNumberOfBreadboards)
             {
-                for (int i = currentNumberOfBreadboards; i >= newNumberOfBreadboards; i--)
+                for (int i = currentNumberOfBreadboards - 1; i >= newNumberOfBreadboards; i--)
                 {
                     RemoveBreadboard(i);
                 }
             }
+        }
+
+        public int GetNumberOfBreadboards()
+        {
+            return Breadboards.Count;
         }
 
         private void ZoomIn_Executed(object sender, ExecutedRoutedEventArgs e)
@@ -482,33 +1237,30 @@ namespace SimGUI
             DrawArea.LayoutTransform = new ScaleTransform(CurrentZoomFactor, CurrentZoomFactor);
             CScroll.ScrollToHorizontalOffset(CScroll.HorizontalOffset * (1 + ZoomFactorDelta));
             CScroll.ScrollToVerticalOffset(CScroll.VerticalOffset * (1 + ZoomFactorDelta));
-
         }
 
         private void ZoomOut_Executed(object sender, ExecutedRoutedEventArgs e)
         {
             CurrentZoomFactor /= (1 + ZoomFactorDelta);
             DrawArea.LayoutTransform = new ScaleTransform(CurrentZoomFactor, CurrentZoomFactor);
-            CScroll.ScrollToHorizontalOffset(CScroll.HorizontalOffset * (1 - ZoomFactorDelta));
-            CScroll.ScrollToVerticalOffset(CScroll.VerticalOffset * (1 - ZoomFactorDelta));
+            CScroll.ScrollToHorizontalOffset(CScroll.HorizontalOffset / (1 + ZoomFactorDelta));
+            CScroll.ScrollToVerticalOffset(CScroll.VerticalOffset / (1 + ZoomFactorDelta));
         }
+        
         private void ShowHideGraph_Executed(object sender, ExecutedRoutedEventArgs e)
         {
             if (CurrentGraph == null)
             {
                 CurrentGraph = new GraphView();
+                CurrentGraph.SecPerDiv.Val = circuit.SimulationSpeed.Val;
                 CurrentGraph.Show();
             }
             else
             {
                 if (CurrentGraph.IsVisible)
-                {
                     CurrentGraph.Hide();
-                }
                 else
-                {
                     CurrentGraph.Show();
-                }
             }
         }
 
@@ -535,9 +1287,7 @@ namespace SimGUI
             {
                 e.Cancel = true;
             }
-
         }
-
 
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {
@@ -548,35 +1298,21 @@ namespace SimGUI
                     break;
                 default:
                     if (circuit.GetSelectedComponent() != null)
-                    {
                         circuit.GetSelectedComponent().Component_KeyDown(sender, e);
-                    }
                     else if (circuit.GetSelectedWire() != null)
-                    {
                         circuit.GetSelectedWire().Wire_KeyDown(sender, e);
-                    }
                     break;
             }
         }
 
         public ComponentData GetSelectedComponent()
         {
-            if (DevicePicker.SelectedItem is TreeViewItem)
+            if (DevicePicker.SelectedItem is TreeViewItem ti && ti.Header is ComponentData cd) 
             {
-                if(((TreeViewItem)DevicePicker.SelectedItem).Header is ComponentData) {
-                    return (ComponentData)((TreeViewItem)DevicePicker.SelectedItem).Header;
-                }
-                else
-                {
-                    return null;
-                }
-            }
-            else
-            {
-                return null;
-            }
+                return cd;
+            } 
+            return null;
         }
-
 
         //Called when any of the tool items is clicked
         private void ToolChange_Executed(object sender, ExecutedRoutedEventArgs e)
@@ -593,9 +1329,7 @@ namespace SimGUI
             {
                 case "SELECT":
                     if (circuit.GetSelectedWire() != null)
-                    {
                         Prompt.Text = "Wire selected";
-                    }
                     else if (circuit.GetSelectedComponent() != null)
                     {
                         Component c = circuit.GetSelectedComponent();
@@ -606,37 +1340,20 @@ namespace SimGUI
                             Prompt.Text += ", value " + c.ComponentValue.ToString();
                     }
                     else
-                    {
                         Prompt.Text = "Select an object";
-                    }
                     break;
                 case "INTERACT":
                     Prompt.Text = "Click on a component to interact with it";
                     break;
                 case "WIRE":
-                    if(Breadboard.StartedWire) {
-                        Prompt.Text = "Click to finish placing wire";
-                    } else {
-                        Prompt.Text = "Click to start placing wire";
-                    }
+                    Prompt.Text = Breadboard.StartedWire ? "Click to finish placing wire" : "Click to start placing wire";
                     break;
                 case "COMPONENT":
                     ComponentData selectedComponent = GetSelectedComponent();
                     if (selectedComponent != null)
-                    {
-                        if (Breadboard.StartedLeadedComponent)
-                        {
-                            Prompt.Text = "Click to finish placing " + selectedComponent.Label;
-                        }
-                        else
-                        {
-                            Prompt.Text = "Click to place " + selectedComponent.Label;
-                        }
-                    }
+                        Prompt.Text = Breadboard.StartedLeadedComponent ? "Click to finish placing " + selectedComponent.Label : "Click to place " + selectedComponent.Label;
                     else
-                    {
                         Prompt.Text = "Select a component type from the panel on the left";
-                    }
                     break;
                 case "DELETE":
                     Prompt.Text = "Click on a component or wire to delete it";
@@ -650,9 +1367,7 @@ namespace SimGUI
             circuit.PurgeUnfinished();
             circuit.DeselectAll();
             foreach (ToggleButton t in Toolbox.Items.OfType<ToggleButton>())
-            {
                 t.IsChecked = false;
-            }
             SelectedTool = toolName.ToUpper();
             switch (SelectedTool)
             {
@@ -683,21 +1398,14 @@ namespace SimGUI
         private void DevicePicker_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
             if (GetSelectedComponent() != null)
-            {
                 SelectTool("COMPONENT");
-            }
         }
-
+        
         private void RunSimulation_Executed(object sender, ExecutedRoutedEventArgs e)
         {
-            StartSimulation();
+            StartSimulation(CurrentSimulator.SimRunning);
         }
-
-        public int GetNumberOfBreadboards()
-        {
-            return Breadboards.Count;
-        }
-
+        
         //If necessary, displays a warning about unsaved changes. Returns false when cancelled.
         private bool DisplaySaveChangesDialog()
         {
@@ -711,33 +1419,29 @@ namespace SimGUI
                     return true;
                 }
                 else if (result == MessageBoxResult.No)
-                {
                     return true;
-                }
-                else {
+                else
                     return false;
-                }
             }
             else
-            {
                 return true;
-            }
         }
 
         private void NewFile_Executed(object sender, ExecutedRoutedEventArgs e)
         {
+            isManuallyStopped = true;
             StopSimulation.Command.Execute(null);
             if (DisplaySaveChangesDialog())
             {
                 LastOpenedFile = null;
-                Title = "Breadboard Simulator - Untitled";
-                circuit.ClearUndoQueue();
-                circuit.ClearCircuit();
+                Title = "Breadboard Simulator (MI) - Untitled";
+                PrepareForNewFile();
             }
         }
 
         private void Open_Executed(object sender, ExecutedRoutedEventArgs e)
         {
+            isManuallyStopped = true;
             StopSimulation.Command.Execute(null);
             if (DisplaySaveChangesDialog())
             {
@@ -745,34 +1449,22 @@ namespace SimGUI
                 openDialog.CheckFileExists = true;
                 openDialog.Filter = "Breadboards (.bbrd)|*.bbrd";
                 openDialog.DefaultExt = ".bbrd";
-                bool? result = openDialog.ShowDialog();
-                //We want to check that file selection is successful and the user did not click Cancel
-                if (result == true)
+                if (openDialog.ShowDialog() == true)
                 {
                     string filename = openDialog.FileName;
-                    circuit.ClearUndoQueue();
+                    PrepareForNewFile();
                     circuit.LoadCircuit(filename);
                     LastOpenedFile = filename;
-                    Title = "Breadboard Simulator - " + System.IO.Path.GetFileNameWithoutExtension(filename);
+                    Title = "Breadboard Simulator (MI) - " + System.IO.Path.GetFileNameWithoutExtension(filename);
                 }
             }
-
         }
 
         private void Save_Executed(object sender, ExecutedRoutedEventArgs e)
         {
             bool? result = false;
             string filename;
-
-            bool saveAsCommand = false;
-            if (e != null)
-            {
-                if (((RoutedCommand)e.Command).Name == "SaveAs")
-                {
-                    saveAsCommand = true;
-                }
-            }
-
+            bool saveAsCommand = (e != null && ((RoutedCommand)e.Command).Name == "SaveAs");
             if (!saveAsCommand && (LastOpenedFile != null))
             {
                 result = true;
@@ -789,28 +1481,22 @@ namespace SimGUI
                     saveDialog.FileName = System.IO.Path.GetFileName(LastOpenedFile);
                 }
                 else
-                {
                     saveDialog.FileName = "Untitled";
-                }
-
                 result = saveDialog.ShowDialog();
                 filename = saveDialog.FileName;
             }
-           
-            
-
             if (result == true)
             {
                 circuit.SaveCircuit(filename);
                 circuit.UndoQueueChangedFlag = false;
                 LastOpenedFile = filename;
-                Title = "Breadboard Simulator - " + System.IO.Path.GetFileNameWithoutExtension(filename);
+                Title = "Breadboard Simulator (MI) - " + System.IO.Path.GetFileNameWithoutExtension(filename);
             }
         }
 
-
         private void StopSimulation_Executed(object sender, ExecutedRoutedEventArgs e)
         {
+            isManuallyStopped = true;
             CurrentSimulator.Stop();
             UpdateTimer.Stop();
             NumberOfUpdates = 0;
@@ -819,6 +1505,11 @@ namespace SimGUI
             foreach (Component c in circuit.Components)
             {
                 c.UpdateFromSimulation(0, CurrentSimulator, SimulationEvent.STOPPED);
+            }
+
+            if (DrawArea.IsMouseOver)
+            {
+                UpdateHoverBox(Mouse.GetPosition(DrawArea));
             }
         }
 
@@ -844,7 +1535,6 @@ namespace SimGUI
 
         private void Window_ContentRendered(object sender, EventArgs e)
         {
-
         }
 
         private void HelpAbout_Executed(object sender, ExecutedRoutedEventArgs e)
@@ -861,7 +1551,6 @@ namespace SimGUI
         {
             System.Diagnostics.Process.Start("res\\doc\\getting-started.html");
         }
-
     }
 
     //Commands that are not built in to WPF, but that are needed for this application

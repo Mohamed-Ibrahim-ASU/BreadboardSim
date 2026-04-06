@@ -2,7 +2,7 @@
 #include "PassiveComponents.h"
 #include "DiscreteSemis.h"
 #include "LogicGates.h"
-
+#include "Sources.h"
 #include "Opamp.h"
 Circuit::Circuit()
 {
@@ -49,6 +49,9 @@ void Circuit::ReadNetlist(std::string data)
 			}
 			else if (parts[0] == "OPAMP") {
 				AddComponent(parts, new Opamp());
+			}
+			else if (parts[0] == "V_SINE") {
+    			AddComponent(parts, new SineSource());
 			}
 			else if (parts[0].find("LOGIC_") == 0) {
 				AddComponent(parts, new LogicGate(parts[0].substr(6)));

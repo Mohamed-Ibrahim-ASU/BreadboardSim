@@ -30,7 +30,8 @@ namespace SimGUI
         public bool UsingModel = false;
         //Whether the cancel or OK button was pressed
         public bool WasCancelled = true;
-
+        public ComboBox ColorSelectionBox;
+        
         //Add a quantity to the properties dialog
         public void AddQuantity(Quantity quantity)
         {
@@ -92,7 +93,45 @@ namespace SimGUI
             MainGrid.RowDefinitions[0].Height = new GridLength(30);
             models.ForEach((a) => ModelSelection.Items.Add(a));
         }
+        public void AddColorSelection(Brush currentBrush)
+{
+    CustomGrid.RowDefinitions.Add(new RowDefinition());
+    
+    Label colorLabel = new Label { Content = "Trace Color:", VerticalAlignment = VerticalAlignment.Center };
+    Grid.SetRow(colorLabel, nextRow);
+    Grid.SetColumn(colorLabel, 0);
+    CustomGrid.Children.Add(colorLabel);
 
+    ColorSelectionBox = new ComboBox { VerticalAlignment = VerticalAlignment.Center, Width = 120, HorizontalAlignment = HorizontalAlignment.Left };
+    
+    // Add standard trace colors
+    var colors = new List<KeyValuePair<string, Brush>> {
+        new KeyValuePair<string, Brush>("Red", Brushes.Red),
+        new KeyValuePair<string, Brush>("Blue", Brushes.Blue),
+        new KeyValuePair<string, Brush>("Green", Brushes.Green),
+        new KeyValuePair<string, Brush>("Gold", Brushes.DarkGoldenrod),
+        new KeyValuePair<string, Brush>("Cyan", Brushes.DarkCyan),
+        new KeyValuePair<string, Brush>("Magenta", Brushes.Magenta),
+        new KeyValuePair<string, Brush>("Orange", Brushes.DarkOrange),
+        new KeyValuePair<string, Brush>("Brown", Brushes.SaddleBrown)
+    };
+
+    ColorSelectionBox.ItemsSource = colors;
+    ColorSelectionBox.DisplayMemberPath = "Key";
+    ColorSelectionBox.SelectedValuePath = "Value";
+
+    // Select the current color
+    foreach (var item in colors) {
+        if (item.Value.ToString() == currentBrush.ToString()) ColorSelectionBox.SelectedItem = item;
+    }
+    if (ColorSelectionBox.SelectedIndex == -1) ColorSelectionBox.SelectedIndex = 0;
+
+    Grid.SetRow(ColorSelectionBox, nextRow);
+    Grid.SetColumn(ColorSelectionBox, 1);
+    CustomGrid.Children.Add(ColorSelectionBox);
+    
+    nextRow++;
+}
         //Set the currently selected model
         public void SelectModel(string modelName)
         {

@@ -11,7 +11,12 @@
 <label pin="2" name="Base"/>
 <label pin="3" name="Collector"/>
 </model>
-
+<model name="BC639" category="npn" footprint="TO-92">
+<data>BJT {r} {2} {3} {1} type=npn is=3.06e-15 bf=129 br=2.92 rb=16.5 rc=0.311 re=0.01260</data>
+<label pin="1" name="Emitter"/>
+<label pin="2" name="Collector"/>
+<label pin="3" name="Base"/>
+</model>
 <model name="2N2907" category="pnp" footprint="TO-92">
 <data>BJT {r} {3} {2} {1} type=pnp is=1.1e-12 bf=200 br=6 rb=50 re=0.4 rc=0.6</data>
 <label pin="1" name="Emitter"/>

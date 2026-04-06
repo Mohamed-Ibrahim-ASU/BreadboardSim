@@ -48,6 +48,22 @@ RES {r}.R2 {2} {r}.inN res=1</data>
 <label pin="8" name="No Connect"/>
 </model>
 
+<model name="LM358 Op-amp" category="Analog" footprint="DIP8-SMALLFONT">
+<data>OPAMP {r}a {r}.ainP {r}.ainN {1} {4} {8} rin=2e6 vosatp=1.5 vosatn=0 rout=20
+RES {r}.R1a {3} {r}.ainP res=1
+RES {r}.R2a {2} {r}.ainN res=1
+OPAMP {r}b {r}.binP {r}.binN {7} {4} {8} rin=2e6 vosatp=1.5 vosatn=0 rout=20
+RES {r}.R1b {5} {r}.binP res=1
+RES {r}.R2b {6} {r}.binN res=1</data>
+<label pin="1" name="Output A"/>
+<label pin="2" name="Inverting Input A (-)"/>
+<label pin="3" name="Non-Inverting Input A (+)"/>
+<label pin="4" name="Ground (V-)"/>
+<label pin="5" name="Non-Inverting Input B (+)"/>
+<label pin="6" name="Inverting Input B (-)"/>
+<label pin="7" name="Output B"/>
+<label pin="8" name="Supply Voltage (V+)"/>
+</model>
 
 <model name="TL074 Op-amp" category="Analog" footprint="DIP14">
 <data>OPAMP {r}a {r}.ainP {r}.ainN {1} {11} {4} rin=1e12 vosatp=1 vosatn=1 rout=20 

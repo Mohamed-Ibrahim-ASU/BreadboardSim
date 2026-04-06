@@ -1,16 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 
 namespace SimGUI
@@ -18,66 +10,132 @@ namespace SimGUI
     public class LeadedComponent : Component
     {
         public int Length = 0;
-        public int MinLength = 3;
+        
+        public int MinLength 
+        { 
+            get { return 1; } 
+            set { /* Silently ignore any attempts to make this longer! */ } 
+        }
+        
         public Orientation orientation;
         public bool IsTemporary = false;
 
+        public Point EndPoint;
+        public bool Is2D = false;
+
         public LeadedComponent(Circuit parent, Point origin) : base(parent, origin)
         {
-
+            EndPoint = origin; 
         }
 
         public virtual void Render()
         {
             Children.Clear();
-            int renderLength = Math.Abs(Length);
-            //Wire starting tip
-           /* Path leads = new Path();
-            leads.StrokeThickness = 0.02;
-            leads.Stroke = Brushes.Gray;
-            leads.Fill = Brushes.Gray;
-            if (orientation == Orientation.Horizontal)
-                leads.Data = new RectangleGeometry(new Rect(-0.2, -0.15, renderLength + 0.4, 0.3));
-            else
-                leads.Data = new RectangleGeometry(new Rect(-0.15, -0.2, 0.3, renderLength + 0.4));
-            leads.RenderTransform = new ScaleTransform(Constants.ScaleFactor, Constants.ScaleFactor);
-            Canvas.SetZIndex(leads, -1); //Make leads appear behind component body
-            Children.Add(leads);*/
+            double renderDist = Math.Abs(Length);
+            double angle = 0;
 
-            Path lead1 = new Path();
-            lead1.Name = "pin1";
-            lead1.StrokeThickness = 0.02;
-            lead1.Stroke = Brushes.Gray;
-            lead1.Fill = Brushes.Gray;
-            if (orientation == Orientation.Horizontal)
-                lead1.Data = new RectangleGeometry(new Rect(-0.2, -0.15, renderLength / 2.0 + 0.2, 0.3));
+            if (Is2D)
+            {
+                double dx = EndPoint.X - ComponentPosition.X;
+                double dy = EndPoint.Y - ComponentPosition.Y;
+                double absDist = Math.Sqrt(dx * dx + dy * dy);
+                
+                renderDist = absDist / Constants.ScaleFactor;
+                angle = Math.Atan2(dy, dx) * (180.0 / Math.PI);
+                
+                Length = (int)Math.Round(renderDist);
+                orientation = Orientation.Horizontal; 
+            }
             else
-                lead1.Data = new RectangleGeometry(new Rect(-0.15, -0.2, 0.3, renderLength / 2.0 + 0.2));
+            {
+                if (Length < 0) angle = 180;
+            }
+
+            // 1. DRAG PREVIEW SHADOWS
+            double shadowSize = 0.22 * Constants.ScaleFactor;
+            if (IsTemporary)
+            {
+                Path startShadow = new Path { Fill = new SolidColorBrush(Color.FromArgb(90, 0, 0, 0)), Data = new EllipseGeometry(new Point(0, 0), shadowSize, shadowSize), IsHitTestVisible = false };
+                Children.Add(startShadow);
+
+                if (renderDist >= 0.1)
+                {
+                    Path endShadow = new Path { Fill = new SolidColorBrush(Color.FromArgb(90, 0, 0, 0)), Data = new EllipseGeometry(new Point(renderDist * Constants.ScaleFactor, 0), shadowSize, shadowSize), IsHitTestVisible = false };
+                    Children.Add(endShadow);
+                }
+            }
+
+            // 2. THE GREY LEADS
+            Path lead1 = new Path { Name = "pin1", StrokeThickness = 0.02, Stroke = Brushes.Gray, Fill = Brushes.Gray, IsHitTestVisible = false };
+            Path lead2 = new Path { Name = "pin2", StrokeThickness = 0.02, Stroke = Brushes.Gray, Fill = Brushes.Gray, IsHitTestVisible = false };
+
+            if (Is2D || orientation == Orientation.Horizontal)
+            {
+                lead1.Data = new RectangleGeometry(new Rect(-0.2, -0.15, renderDist / 2.0 + 0.2, 0.3));
+                lead2.Data = new RectangleGeometry(new Rect(renderDist / 2.0, -0.15, renderDist / 2.0 + 0.2, 0.3));
+            }
+            else
+            {
+                lead1.Data = new RectangleGeometry(new Rect(-0.15, -0.2, 0.3, renderDist / 2.0 + 0.2));
+                lead2.Data = new RectangleGeometry(new Rect(-0.15, renderDist / 2.0, 0.3, renderDist / 2.0 + 0.2));
+            }
+
             lead1.RenderTransform = new ScaleTransform(Constants.ScaleFactor, Constants.ScaleFactor);
-            Canvas.SetZIndex(lead1, -1); //Make leads appear behind component body
-            Children.Add(lead1);
-
-            Path lead2 = new Path();
-            lead2.Name = "pin2";
-            lead2.StrokeThickness = 0.02;
-            lead2.Stroke = Brushes.Gray;
-            lead2.Fill = Brushes.Gray;
-            if (orientation == Orientation.Horizontal)
-                lead2.Data = new RectangleGeometry(new Rect(renderLength / 2.0, -0.15, renderLength / 2.0 + 0.2, 0.3));
-            else
-                lead2.Data = new RectangleGeometry(new Rect(-0.15, renderLength / 2.0, 0.3, renderLength / 2.0 + 0.2));
             lead2.RenderTransform = new ScaleTransform(Constants.ScaleFactor, Constants.ScaleFactor);
-            Canvas.SetZIndex(lead2, -1); //Make leads appear behind component body
+
+            Canvas.SetZIndex(lead1, -1); 
+            Canvas.SetZIndex(lead2, -1);
+            Children.Add(lead1);
             Children.Add(lead2);
 
-            if (Length < 0)
+            // 3. METALLIC PINS
+            double pinSize = 0.1 * Constants.ScaleFactor; 
+            Path startPin = new Path { Fill = Brushes.LightGray, Stroke = Brushes.DimGray, StrokeThickness = 0.03 * Constants.ScaleFactor, Data = new EllipseGeometry(new Point(0, 0), pinSize, pinSize), IsHitTestVisible = false };
+            Children.Add(startPin);
+
+            if (renderDist >= 0.1)
             {
-                RenderTransform = new RotateTransform(180);
+                Path endPin = new Path { Fill = Brushes.LightGray, Stroke = Brushes.DimGray, StrokeThickness = 0.03 * Constants.ScaleFactor, Data = new EllipseGeometry(new Point(renderDist * Constants.ScaleFactor, 0), pinSize, pinSize), IsHitTestVisible = false };
+                Children.Add(endPin);
+                
+                // 4. INVISIBLE HITBOX
+                double gap = 0.4 * Constants.ScaleFactor;
+                Point hitStart = renderDist * Constants.ScaleFactor > gap * 2 ? new Point(gap, 0) : new Point(0, 0);
+                Point hitEnd = renderDist * Constants.ScaleFactor > gap * 2 ? new Point(renderDist * Constants.ScaleFactor - gap, 0) : new Point(renderDist * Constants.ScaleFactor, 0);
+
+                Path hitBox = new Path
+                {
+                    Stroke = Brushes.Transparent, 
+                    StrokeThickness = 0.6 * Constants.ScaleFactor, 
+                    StrokeStartLineCap = PenLineCap.Round,
+                    StrokeEndLineCap = PenLineCap.Round,
+                    Data = new LineGeometry(hitStart, hitEnd),
+                    IsHitTestVisible = true 
+                };
+                Children.Add(hitBox);
             }
-            else
+
+            RenderTransform = new RotateTransform(angle);
+        }
+
+        public override Dictionary<int, Point> GetPinPositions()
+        {
+            Dictionary<int, Point> realPinPositions = new Dictionary<int, Point>();
+            realPinPositions[1] = new Point(0, 0); 
+            
+            if (Is2D) 
             {
-                RenderTransform = new RotateTransform(0);
+                double dx = (EndPoint.X - ComponentPosition.X) / Constants.ScaleFactor;
+                double dy = (EndPoint.Y - ComponentPosition.Y) / Constants.ScaleFactor;
+                realPinPositions[2] = new Point(dx, dy);
             }
+            else 
+            {
+                if (orientation == Orientation.Horizontal) realPinPositions[2] = new Point(Length, 0);
+                else realPinPositions[2] = new Point(0, Length);
+                
+            }
+            return realPinPositions;
         }
 
         public void MakeTemporary()
@@ -95,19 +153,64 @@ namespace SimGUI
             Opacity = 1;
             Render();
         }
+
         public override Dictionary<string, string> SaveParameters()
         {
-            //We also need to save component length
             Dictionary<string, string> parameters = base.SaveParameters();
+            if (Is2D) 
+            {
+                parameters["endX"] = EndPoint.X.ToString();
+                parameters["endY"] = EndPoint.Y.ToString();
+            }
             parameters["orientation"] = (orientation == Orientation.Horizontal) ? "horiz" : "vert";
             parameters["length"] = Length.ToString();
             return parameters;
         }
+
         public override void LoadParameters(Dictionary<string, string> parameters)
         {
             base.LoadParameters(parameters);
-            orientation = (parameters["orientation"] == "horiz") ? Orientation.Horizontal : Orientation.Vertical;
-            Length = int.Parse(parameters["length"]);
+            
+            if (parameters.ContainsKey("endX") && parameters.ContainsKey("endY")) 
+            {
+                Is2D = true;
+                EndPoint = new Point(double.Parse(parameters["endX"]), double.Parse(parameters["endY"]));
+            } 
+            else 
+            {
+                Is2D = false;
+            }
+            
+            if (parameters.ContainsKey("orientation") && parameters.ContainsKey("length"))
+            {
+                // Modern save file.
+                orientation = (parameters["orientation"] == "horiz") ? Orientation.Horizontal : Orientation.Vertical;
+                Length = int.Parse(parameters["length"]);
+            }
+            else
+            {
+                // Old legacy save file.
+                int legacyAngle = parameters.ContainsKey("angle") ? int.Parse(parameters["angle"]) : 0;
+
+                if (legacyAngle == 90 || legacyAngle == 270) 
+                    orientation = Orientation.Vertical;
+                else 
+                    orientation = Orientation.Horizontal;
+
+                if (PinPositions != null && PinPositions.ContainsKey(2))
+                {
+                    double dx = PinPositions[2].X;
+                    double dy = PinPositions[2].Y;
+                    Length = (int)Math.Round(Math.Max(Math.Abs(dx), Math.Abs(dy)));
+                }
+                else
+                {
+                    Length = 1; 
+                }
+
+                if (legacyAngle == 180 || legacyAngle == 270) Length = -Length;
+            }
+            
             Render();
         }
     }

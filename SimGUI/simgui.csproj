@@ -3,20 +3,22 @@
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <Platform Condition=" '$(Platform)' == '' ">x86</Platform>
     <ProjectGuid>{8DB5ECE7-E768-4F4F-BC67-8CAB08D7FBD8}</ProjectGuid>
     <OutputType>WinExe</OutputType>
+    <ApplicationIcon>res\app.ico</ApplicationIcon>
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>SimGUI</RootNamespace>
     <AssemblyName>BreadboardSim</AssemblyName>
-    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <ProjectTypeGuids>{60dc8134-eba5-43b8-bcc9-bb4bc16c2548};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
     <WarningLevel>4</WarningLevel>
     <TargetFrameworkProfile />
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <PlatformTarget>AnyCPU</PlatformTarget>
+  
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
+    <PlatformTarget>x86</PlatformTarget>
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
@@ -26,8 +28,9 @@
     <WarningLevel>4</WarningLevel>
     <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <PlatformTarget>AnyCPU</PlatformTarget>
+
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x86' ">
+    <PlatformTarget>x86</PlatformTarget>
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
     <OutputPath>bin\Release\</OutputPath>
@@ -36,13 +39,7 @@
     <WarningLevel>4</WarningLevel>
     <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
-  <PropertyGroup>
-    <StartupObject>
-    </StartupObject>
-  </PropertyGroup>
-  <PropertyGroup>
-    <ApplicationIcon>app.ico</ApplicationIcon>
-  </PropertyGroup>
+
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="System.Data" />
@@ -57,6 +54,7 @@
     <Reference Include="WindowsBase" />
     <Reference Include="PresentationCore" />
     <Reference Include="PresentationFramework" />
+    <Reference Include="System.Drawing" />
   </ItemGroup>
   <ItemGroup>
     <ApplicationDefinition Include="App.xaml">
@@ -78,6 +76,9 @@
     <Compile Include="Components\Potentiometer.cs" />
     <Compile Include="Components\Capacitor.cs" />
     <Compile Include="Components\IntegratedCircuit.cs" />
+    <Compile Include="Components\FunctionGenerator.cs" />
+    <Compile Include="Components\DiffProbe.cs" />
+    <Compile Include="Components\CurrentProbe.cs" />
     <Compile Include="Components\Resistor.cs" />
     <Compile Include="Components\Switch.cs" />
     <Compile Include="Components\Transistor.cs" />
@@ -127,93 +128,24 @@
       <DependentUpon>MainWindow.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Properties\AssemblyInfo.cs">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="Properties\Resources.Designer.cs">
-      <AutoGen>True</AutoGen>
-      <DesignTime>True</DesignTime>
-      <DependentUpon>Resources.resx</DependentUpon>
-    </Compile>
-    <Compile Include="Properties\Settings.Designer.cs">
-      <AutoGen>True</AutoGen>
-      <DependentUpon>Settings.settings</DependentUpon>
-      <DesignTimeSharedInput>True</DesignTimeSharedInput>
-    </Compile>
-    <EmbeddedResource Include="Properties\Resources.resx">
-      <Generator>ResXFileCodeGenerator</Generator>
-      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
-    </EmbeddedResource>
-    <None Include="Properties\Settings.settings">
-      <Generator>SettingsSingleFileGenerator</Generator>
-      <LastGenOutput>Settings.Designer.cs</LastGenOutput>
-    </None>
-    <AppDesigner Include="Properties\" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="App.config" />
-  </ItemGroup>
-  <ItemGroup>
-    <Resource Include="res\tools\component.png" />
-    <Resource Include="res\tools\delete.png" />
-    <Resource Include="res\tools\interact.png" />
-    <Resource Include="res\tools\select.png" />
-    <Resource Include="res\tools\wire.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <Resource Include="res\tools\component.cur" />
-    <Resource Include="res\tools\delete.cur" />
-    <Resource Include="res\tools\interact.cur" />
-    <Resource Include="res\tools\wire.cur" />
-  </ItemGroup>
-  <ItemGroup>
-    <Resource Include="Properties\actions\save.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <Resource Include="Properties\actions\open.png" />
-    <Resource Include="Properties\actions\settings.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <Resource Include="Properties\actions\zoomin.png" />
-    <Resource Include="Properties\actions\zoomout.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <Resource Include="res\actions\open.png" />
-    <Resource Include="res\actions\save.png" />
-    <Resource Include="res\actions\settings.png" />
-    <Resource Include="res\actions\zoomin.png" />
-    <Resource Include="res\actions\zoomout.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <Resource Include="res\actions\redo.png" />
-    <Resource Include="res\actions\undo.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <Resource Include="res\app.ico" />
-  </ItemGroup>
-  <ItemGroup>
-    <Resource Include="app.ico" />
-  </ItemGroup>
-  <ItemGroup>
-    <Resource Include="res\actions\graph.png" />
-    <Resource Include="res\actions\run.png" />
-    <Resource Include="res\actions\stop.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <Resource Include="res\breadboard\breadboard.png" />
+    <Content Include="res\tools\*.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="res\actions\*.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="res\breadboard\breadboard.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="res\app.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="res\footprints.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <PropertyGroup>
-    <PostBuildEvent>
-    </PostBuildEvent>
-  </PropertyGroup>
-  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
-       Other similar extension points exist, see Microsoft.Common.targets.
-  <Target Name="BeforeBuild">
-  </Target>
-  <Target Name="AfterBuild">
-  </Target>
-  -->
 </Project>

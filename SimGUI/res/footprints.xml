@@ -325,5 +325,43 @@
 <path name="pin1" fillcolour="Transparent" linecolour="Transparent">M -0.3, -0.3 h 0.6 v 0.6 h -0.6 v -0.6</path>
 <path name="pin2" fillcolour="Transparent" linecolour="Transparent">M 0.7, -0.3 h 0.6 v 0.6 h -0.6 v -0.6</path>
 </footprint>
+<footprint name="AC_ROUND">
+<pin number="3" x="0" y="0"/>
+<pin number="4" x="0" y="3"/>
+<pin number="1" x="2" y="0"/>
+<pin number="2" x="2" y="3"/>
+<path name="pin3" fillcolour="Gray" linecolour="Gray">M -0.2, -0.2 h 0.4 v 0.4 h -0.4 Z</path>
+<path name="pin4" fillcolour="Gray" linecolour="Gray">M -0.2, 2.8 h 0.4 v 0.4 h -0.4 Z</path>
+<path name="pin1" fillcolour="Gray" linecolour="Gray">M 1.8, -0.2 h 0.4 v 0.4 h -0.4 Z</path>
+<path name="pin2" fillcolour="Gray" linecolour="Gray">M 1.8, 2.8 h 0.4 v 0.4 h -0.4 Z</path>
+<path fillcolour="White" linecolour="Black" thickness="0.1">M -0.2, 1.5 A 1.2,1.2 0 1,1 2.2,1.5 A 1.2,1.2 0 1,1 -0.2,1.5</path>
+<path fillcolour="Transparent" linecolour="Black" thickness="0.15">M 0.2,1.5 Q 0.6,0.8 1,1.5 T 1.8,1.5</path>
+<text name="_Model" X="0.3" Y="2.5" size="0.5" colour="Black">AC</text>
+</footprint>
+<footprint name="FunctionGenerator">
+    <path name="body" linecolour="#FF1A252F" fillcolour="#FF2C3E50" thickness="0.05">M -0.75,0.5 L 0.75,0.5 L 0.75,2.5 L -0.75,2.5 Z</path>
+    <path name="pin1" linecolour="#FFBDC3C7" thickness="0.12">M 0,0 L 0,0.5</path>
+    <path name="pin2" linecolour="#FFBDC3C7" thickness="0.12">M 0,2.5 L 0,3</path>
+    <path name="out_arrow" linecolour="#FFFFB300" thickness="0.04">M 0,0.85 L 0,0.65 M -0.12,0.77 L 0,0.65 L 0.12,0.77</path>
+    <path name="bezel" linecolour="#FF000000" fillcolour="#FF0A0A0A" thickness="0.02">M -0.65,1.0 L 0.65,1.0 L 0.65,2.0 L -0.65,2.0 Z</path>
+    
+    <text name="_FreqText" X="-0.4" Y="1.1" size="0.22" colour="#FF00E676">1Hz</text>
 
+    <path name="icon_sine" linecolour="#FF00E5FF" thickness="0.035">M -0.5,1.75 Q -0.375,1.55 -0.25,1.75 T 0,1.75</path>
+    <path name="icon_square" linecolour="#FF00E5FF" thickness="0.035">M -0.5,1.85 L -0.5,1.6 L -0.25,1.6 L -0.25,1.85 L 0,1.85</path>
+    <path name="icon_triangle" linecolour="#FF00E5FF" thickness="0.035">M -0.5,1.85 L -0.25,1.55 L 0,1.85</path>
+    
+    <path name="icon_dc1" linecolour="#FF00E5FF" thickness="0.035">M -0.5,1.65 L 0,1.65</path>
+    <path name="icon_dc2" linecolour="#FF00E5FF" thickness="0.035">M -0.5,1.8 L -0.3,1.8 M -0.1,1.8 L 0.1,1.8</path>
+
+    <text name="_VoltText" X="0.1" Y="1.53" size="0.18" colour="#FF00E5FF">2V</text>
+
+    <path name="gnd_stem" linecolour="#FF00E676" thickness="0.03">M 0,2.15 L 0,2.4</path>
+    <path name="gnd_line1" linecolour="#FF00E676" thickness="0.03">M -0.2,2.15 L 0.2,2.15</path>
+    <path name="gnd_line2" linecolour="#FF00E676" thickness="0.03">M -0.12,2.27 L 0.12,2.27</path>
+    <path name="gnd_line3" linecolour="#FF00E676" thickness="0.03">M -0.04,2.4 L 0.04,2.4</path>
+
+    <pin number="1" x="0" y="0" />
+    <pin number="2" x="0" y="3" />
+  </footprint>
 </footprints>

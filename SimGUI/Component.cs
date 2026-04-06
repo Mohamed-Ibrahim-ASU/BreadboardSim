@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.Collections.Generic;
 using System.Linq;
@@ -20,44 +20,42 @@ namespace SimGUI
 {
     public class Component : Canvas
     {
-        //Unique reference for component e.g. R1, D12, U3 etc
+        // Unique reference for component e.g. R1, D12, U3 etc
         public string ID = "";
-        //Absolute position of origin of component
+        // Absolute position of origin of component
         protected Point ComponentPosition;
-        //Map between pin number and relative position on component (scaled such that 1unit = spacing between two adjacent holes)
+        // Map between pin number and relative position on component (scaled such that 1 unit = spacing between two adjacent holes)
         protected Dictionary<int, Point> PinPositions;
-        //The context menu displayed when the component is right clicked
+        // The context menu displayed when the component is right clicked
         protected ContextMenu ComponentContextMenu;
-        //Rotation angle of component in degrees
+        // Rotation angle of component in degrees
         protected int Angle = 0;
-        //The circuit which contains the component
+        // The circuit which contains the component
         protected Circuit ParentCircuit;
-        //Whether or not the component has been selected
+        // Whether or not the component has been selected
         public bool IsSelected = false;
-        //The value of the component, e.g. the resistance of a resistor. Keep at 0 if irrelevant (e.g. for ICs)
+        // The value of the component, e.g. the resistance of a resistor. Keep at 0 if irrelevant (e.g. for ICs)
         public Quantity ComponentValue = new Quantity("","","");
-        //A mapping between pin number, and the name of the net connected to that pin
+        // A mapping between pin number and the name of the net connected to that pin
         public Dictionary<int, string> ConnectedNets;
-        //A mapping between pin number, and component pin current variables related to that pin in the simulator
+        // A mapping between pin number and component pin current variables related to that pin in the simulator
         protected Dictionary<int, List<int>> ConnectedPinVariables;
-        //A mapping betwen pin number and user-friendly pin name
+        // A mapping between pin number and user-friendly pin name
         protected Dictionary<int, string> PinNames;
 
-        //Type of component e.g. Resistor, Capacitor, Variable Resistor, Integrated Circuit
+        // Type of component e.g. Resistor, Capacitor, Variable Resistor, Integrated Circuit
         public string ComponentType = "";
-        //Model of component, e.g. 4001, 555, 1N4001, etc
+        // Model of component, e.g. 4001, 555, 1N4001, etc
         public string ComponentModel = "";
-        /*
-         * Netlist in unmerged form, which will have $n (where n is a positive integer) 
-         * replaced with the net connected to pin n and $r replaced with the component name
-         */
+        // Netlist in unmerged form; {n} is replaced with the net on pin n, {r} with the component ID
         public string UnmergedNetlist = "";
-        //The model filename for a given component type
+        // The model filename for a given component type
         public string ModelFile = "";
-        //The modle category that the component is
+        // The model category of the component, e.g. "BJT", "MOSFET" (null if uncategorised)
         public string ModelCategory = null;
-        //Whether or not the component is currently being dragged
+        // Whether or not the component is currently being dragged
         public bool DragStarted = false;
+
         public Component(Circuit parent, Point origin)
         {
             ParentCircuit = parent;
@@ -71,7 +69,6 @@ namespace SimGUI
 
             ComponentValue.AllowZero = false;
 
-           // RenderTransform = new ScaleTransform(Constants.scaleFactor, Constants.scaleFactor);
             UpdateTransform();
             MouseDown += Component_MouseDown;
             MouseMove += Component_MouseMove;
@@ -109,7 +106,7 @@ namespace SimGUI
             ShowComponentProperties();
         }
 
-        //Component_KeyDown must be public as it may be called if there is a MainWindow keypress that is not otherwise handled
+        // Component_KeyDown must be public as it may be called if there is a MainWindow keypress that is not otherwise handled
         public void Component_KeyDown(object sender, KeyEventArgs e)
         {
             switch (e.Key)
@@ -147,11 +144,11 @@ namespace SimGUI
             UpdateText();
         }
 
-        //Updates the component's rendertransform
+        // Updates the component's rendertransform
         protected void UpdateTransform()
         {
             TransformGroup g = new TransformGroup();
-            //Scale according to our standard scheme such that '1 unit' = the space between two adjacent holes
+            //  Scale according to our standard scheme such that '1 unit' = the space between two adjacent holes
             g.Children.Add(new ScaleTransform(Constants.ScaleFactor, Constants.ScaleFactor));
             g.Children.Add(new RotateTransform(Angle));
             RenderTransform = g;
@@ -195,53 +192,22 @@ namespace SimGUI
                         Canvas.SetLeft(this, ComponentPosition.X);
                         Canvas.SetTop(this, ComponentPosition.Y);
                     }
-
                 }
-
             }
-            //The below statements handle the case that the mouse is moved over a component
-            //while a wire or leaded component is beign placed
-            if (Breadboard.StartedWire)
+            // Forward mouse_move to breadboard so wire/component preview renders when cursor is over a component
+            if (ParentCircuit.ParentWindow.SelectedTool == "WIRE" || ParentCircuit.ParentWindow.SelectedTool == "COMPONENT")
             {
-                Point actualCoord = e.GetPosition(ParentCircuit.ParentWindow.DrawArea);
-                Orientation o = Util.getBestOrientation(Breadboard.WirePointA, actualCoord);
-                int length = 0;
-                if (o == Orientation.Horizontal)
+                foreach (var child in ParentCircuit.ParentWindow.DrawArea.Children)
                 {
-                    length = (int)((actualCoord.X - Breadboard.WirePointA.X) / Constants.ScaleFactor);
-
+                    if (child is Breadboard bb)
+                    {
+                        bb.HandleMouseMove(this, e);
+                    }
                 }
-                else
-                {
-                    length = (int)((actualCoord.Y - Breadboard.WirePointA.Y) / Constants.ScaleFactor);
-                }
-                Breadboard.NewWire.Length = length;
-                Breadboard.NewWire.WireOrientation = o;
-                Breadboard.NewWire.Render();
-            }
-            else if (Breadboard.StartedLeadedComponent)
-            {
-                Point actualCoord = e.GetPosition(ParentCircuit.ParentWindow.DrawArea);
-                Orientation o = Util.getBestOrientation(Breadboard.ComponentPointA, actualCoord);
-                int length = 0;
-                if (o == Orientation.Horizontal)
-                {
-                    length = (int)((actualCoord.X - Breadboard.ComponentPointA.X) / Constants.ScaleFactor);
-
-                }
-                else
-                {
-                    length = (int)((actualCoord.Y - Breadboard.ComponentPointA.Y) / Constants.ScaleFactor);
-                }
-
-                Breadboard.NewLeadedComponent.Length = length;
-                Breadboard.NewLeadedComponent.orientation = o;
-                Breadboard.NewLeadedComponent.Render();
-
             }
         }
 
-        //Finishes moving the component about
+        // Finishes moving the component about
         public void FinishDrag()
         {
             if (DragStarted)
@@ -271,7 +237,8 @@ namespace SimGUI
             IsSelected = false;
             Opacity = 1;
         }
-        //A snapshot of component parameters before the move is started
+        
+        //   A snapshot of component parameters before the move is started
         private Dictionary<string, string> PreMoveParameters;
         protected void Component_MouseDown(object sender, MouseButtonEventArgs e)
         {
@@ -297,11 +264,27 @@ namespace SimGUI
                 InteractiveClick(e , true);
             }
             ParentCircuit.ParentWindow.UpdatePrompt();
-
         }
 
         void Component_MouseUp(object sender, MouseButtonEventArgs e)
         {
+            // Forward mouse_up to breadboard so wire/component placement works when clicking over a component
+            if (ParentCircuit.ParentWindow.SelectedTool == "WIRE" || ParentCircuit.ParentWindow.SelectedTool == "COMPONENT")
+            {
+                foreach (var child in ParentCircuit.ParentWindow.DrawArea.Children)
+                {
+                    if (child is Breadboard bb)
+                    {
+                        bb.HandleMouseUp(this, e);
+                        if (e.Handled)
+                        {
+                            break;
+                        }
+                    }
+                }
+                return; 
+            }
+
             InteractiveClick(e, false);
             ParentCircuit.FinishDraggingAll();
         }
@@ -325,11 +308,11 @@ namespace SimGUI
             //Find footprint in XML file
             foreach (var footprintCandidate in footprintDb.DocumentElement.GetElementsByTagName("footprint"))
             {
-                //Object might not be an element, must check before we cast
+                // Object might not be an element (e.g. could be a comment node), must check before we cast
                 if (footprintCandidate is XmlElement)
                 {
                     XmlElement elem = (XmlElement)footprintCandidate;
-                    //We want a case-insensitive match, hence the ToLower() calls
+                    // We want a case-insensitive match, hence the ToLower() calls
                     if (elem.GetAttribute("name").ToLower() == footprint.ToLower())
                     {
                         footprintElement = elem;
@@ -424,6 +407,7 @@ namespace SimGUI
                     {
                         newTextBlock.Foreground = Brushes.Black;
                     }
+                    
                     newTextBlock.Text = textElem.InnerText;
                     Children.Add(newTextBlock);
                 }
@@ -488,8 +472,7 @@ namespace SimGUI
 
         /*
          * Loads the data for a given model from a given XML file, including loading the footprint if relevant, 
-         * and returns a dictionary mapping metadata keys to values
-         * fileName defaults to ModelFile
+         * and returns a dictionary mapping metadata keys to values. fileName defaults to ModelFile.
          */
         public Dictionary<string, string> LoadModel(string modelName, string fileName = null)
         {
@@ -503,11 +486,11 @@ namespace SimGUI
             //Find footprint in XML file
             foreach (var modelCandidate in modelDb.DocumentElement.GetElementsByTagName("model"))
             {
-                //Object might not be an element, must check before we cast
+                // Object might not be an element (e.g. could be a comment node), must check before we cast
                 if (modelCandidate is XmlElement)
                 {
                     XmlElement elem = (XmlElement)modelCandidate;
-                    //We want a case-insensitive match, hence the ToLower() calls
+                    // We want a case-insensitive match, hence the ToLower() calls
                     if (elem.GetAttribute("name").ToLower() == modelName.ToLower())
                     {
                         modelElement = elem;
@@ -521,6 +504,7 @@ namespace SimGUI
                 //Footprint not found, throw an exception.
                 throw new Exception("Component model " + modelName + " not in database.");
             }
+            
             ComponentModel = modelName;
             if (modelElement.GetElementsByTagName("data").Count >= 1)
             {
@@ -544,8 +528,8 @@ namespace SimGUI
             }
 
             PinNames.Clear();
-            //Read pin labels - models can set labels for any path, intended to give user-friendly pin names
-            //Paths must exist when this happens.
+            // Read pin labels - models can set labels for any path, intended to give user-friendly pin names.
+            // Paths must exist when this happens.
             foreach (var labelElement in modelElement.GetElementsByTagName("label").OfType<XmlElement>())
             {
                 if (labelElement.HasAttribute("pin") && (labelElement.HasAttribute("name")))
@@ -571,6 +555,7 @@ namespace SimGUI
             else {
                 ModelCategory = null;
             }
+            
             return metadata;
         }
 
@@ -613,10 +598,8 @@ namespace SimGUI
             foreach (var pinPosition in GetPinPositions())
             {
                 int breadboardID = 0;
-                Point breadboardPosition = Breadboard.GetPositionOnBreadboard(
-                    GetAbsolutePosition(pinPosition.Value), ref breadboardID);
-                connectedBusses[pinPosition.Key] = Breadboard.GetNetAtPoint(breadboardPosition,
-                    breadboardID.ToString());
+                Point breadboardPosition = Breadboard.GetPositionOnBreadboard(GetAbsolutePosition(pinPosition.Value), ref breadboardID);
+                connectedBusses[pinPosition.Key] = Breadboard.GetNetAtPoint(breadboardPosition, breadboardID.ToString());
             }
             return connectedBusses;
         }
@@ -627,8 +610,8 @@ namespace SimGUI
          */
         public virtual string GenerateNetlist()
         {
-            //Default netlist handler just generates the netlist based on the unmerged netlist
-            //Which is suitable for components that use models, e.g. ICs, diodes, transistors
+            // Default netlist handler just generates the netlist based on the unmerged netlist
+            // Which is suitable for components that use models, e.g. ICs, diodes, transistors
             string netlist = UnmergedNetlist;
             foreach (var pinConnection in ConnectedNets)
             {
@@ -688,6 +671,16 @@ namespace SimGUI
                 case "Probe":
                     newComponent = new Probe(parent, origin);
                     break;
+                case "Function Generator":
+                    newComponent = new FunctionGenerator(parent, origin);
+                    break;
+                // --- NEW PROBE ADDED HERE ---
+                case "DiffProbe":
+                    newComponent = new DiffProbe(parent, origin);
+                    break;
+                case "CurrentProbe":
+                    newComponent = new CurrentProbe(parent, origin);
+                    break;
             }
             if (newComponent != null)
             {
@@ -696,7 +689,7 @@ namespace SimGUI
             return newComponent;
          }
 
-        //Shows the component properties dialog
+        // Shows the component properties dialog
         public void ShowComponentProperties()
         {
             ComponentProperties dialog = new ComponentProperties();
@@ -784,7 +777,7 @@ namespace SimGUI
             return parameters;
         }
 
-        //Creates a new component object from the set of parameters generated by SaveParameters()
+        // Creates a new component object from the set of parameters generated by SaveParameters()
         public static Component CreateFromParameters(Circuit parent, Dictionary<string, string> parameters)
         {
             ComponentData data = new ComponentData(parameters["type"], 0, "", "");
@@ -800,7 +793,7 @@ namespace SimGUI
             return newComponent;
         }
 
-        //Loads the entire component state from a set of parameters. Used for undo/redo functionality
+        // Loads the entire component state from a set of parameters. Used for undo/redo functionality
         public void ResetFromParameters(Dictionary<string, string> parameters)
         {
             if (parameters.ContainsKey("model"))
@@ -820,18 +813,18 @@ namespace SimGUI
             ParentCircuit.ParentWindow.UpdatePrompt();
         }
 
-
         /*
-         * This function sets up the component's parameters from a set of key-value pairs - it is called by CreateFromParameters. Component value and model are handled automatically by the load routine
-         * so by default, this function does nothing. It can be overriden if extra parameters need to be loaded.
+         * This function sets up the component's parameters from a set of key-value pairs - it is called by CreateFromParameters. 
+         * Component value and model are handled automatically by the load routine so by default, this function does nothing. 
+         * It can be overriden if extra parameters need to be loaded.
          */
         public virtual void LoadParameters(Dictionary<string, string> parameters)
         {
             
         }
         
-        //Called so that a component can update its appearance based on the simulation. Used, for example, by LEDs.
-        //Passes what type of event has happened, and the total number of updates that have occurred if it is a tick event
+        // Called so that a component can update its appearance based on the simulation. Used, for example, by LEDs.
+        // Passes what type of event has happened, and the total number of updates that have occurred if it is a tick event
         public virtual void UpdateFromSimulation(int numberOfUpdates, Simulator sim, SimulationEvent eventType)
         {
             if (eventType == SimulationEvent.STARTED)
@@ -844,22 +837,22 @@ namespace SimGUI
                     ConnectedPinVariables.Add(pin, new List<int>());
                 
                 }
+                
                 Regex regex = new Regex(@"\{([0-9]+)\}");
                 foreach (string netlistLine in UnmergedNetlist.Split(new char[] {'\n'}))
                 {
                     string[] parts = netlistLine.Trim().Split(new char[] {' '});
                     if (parts.Length >= 3)
                     {
-                        //Ignore fixed voltage nets
+                        // Ignore fixed voltage nets (they don't need pin current variables)
                         if (parts[0] != "NET")
                         {
                             for (int i = 2; i < parts.Length; i++)
                             {
-                                //Look for connections to pin
                                 if (regex.IsMatch(parts[i]))
                                 {
                                     int thisPinNum = int.Parse(regex.Matches(parts[i])[0].Groups[1].Value);
-                                    //Determine pin number of the subcircuit component based on position
+                                    // Determine pin number of the subcircuit component based on position in string
                                     int simPinNum = i - 1;
                                     string simCompName = parts[1].Replace("{r}", ID);
                                     int varId = sim.GetComponentPinCurrentVarId(simCompName, simPinNum);
@@ -890,6 +883,7 @@ namespace SimGUI
                         {
                             label = "Pin " + pin + "\r\n";
                         }
+                        
                         int netVarId = sim.GetNetVoltageVarId(ConnectedNets[pin]);
                         if (netVarId != -1)
                         {
@@ -907,10 +901,8 @@ namespace SimGUI
                                 }
 
                                 string dir = "";
-                                if (current.Val < 0)
-                                    dir = "out";
-                                if (current.Val > 0)
-                                    dir = "in";
+                                if (current.Val < 0) dir = "out";
+                                if (current.Val > 0) dir = "in";
                                 current.Val = Math.Abs(current.Val);
                                 label += "\r\n" + current.ToFixedString() + " " + dir;
 
@@ -926,7 +918,6 @@ namespace SimGUI
                         }
                     }
                 }
-
             }
             else if (eventType == SimulationEvent.STOPPED)
             {
@@ -956,8 +947,8 @@ namespace SimGUI
             }
         }
 
-        //Returns a map between pin number and relative position on component (scaled such that 1unit = spacing between two adjacent holes)
-        //Adjusted for rotation
+        // Returns a map between pin number and relative position on component (scaled such that 1 unit = spacing between two adjacent holes)
+        // Adjusted for rotation
         public virtual Dictionary<int, Point> GetPinPositions()
         {
             Dictionary<int, Point> realPinPositions = new Dictionary<int, Point>();
@@ -968,10 +959,10 @@ namespace SimGUI
         }
     }
 
-    //The possible events that could be the reason for UpdateFromSimulation being called
+    // The possible events that could be the reason for UpdateFromSimulation being called
     public enum SimulationEvent {
-        STARTED, //The simulation was started
-        TICK, //An update tick has occurred
-        STOPPED //The simulation has been stopped
+        STARTED, // The simulation was started
+        TICK, // An update tick has occurred
+        STOPPED // The simulation has been stopped
     }
 }

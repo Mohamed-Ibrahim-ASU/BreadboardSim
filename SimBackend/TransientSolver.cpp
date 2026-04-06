@@ -308,8 +308,8 @@ bool TransientSolver::RampUp(std::map<Net *, double> originalVoltages, double to
 		currentTime += nextTimestep;
 
 		//Ramp up fixed voltage nets
-		for each(auto net in originalVoltages) {
-			Net *vNet = net.first;
+		for (const auto& net : originalVoltages) {
+				Net *vNet = net.first;
 			if (abs(vNet->NetVoltage) < abs(net.second))
 				vNet->NetVoltage += net.second * 0.1;
 		}
