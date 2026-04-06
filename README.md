@@ -9,17 +9,17 @@ This is my take on a fork of Breadboard Simulator, I noticed the program was mis
   When using the function generator, make sure the simulation speed is low enough to allow for proper generation of the functions. Ideally 5x the maximum frequency is what I recommend. 10x should be the absolute maximum; any faster and the shape will be significantly distorted.  
 ### New Components
  As used in our Electronics Lab:
-  Added 1N4007 Diode
-  Added BC639 NPN Transistor
-  Added LM358 OP-AMP
+  Added 1N4007 Diode\n
+  Added BC639 NPN Transistor\n
+  Added LM358 OP-AMP\n
     
 
 ## Probes
 ### Voltage Difference Probes
   The voltage difference probes consist of a positive and a negative probe to measure the voltage drop between any two nodes on the breadboard and plots it on the graph; the usage is almost identical to the oscilloscope probe currently implemented. 
 ### Current Probe (BETA) 
-  The current probe can be used to measure the current going through a lead of most components. Due to SPICE treating wires as nodes, the current probe cannot measure the current flowing through a "wire".
-  To use the current probe, you should place it on an end lead/wire of a component (ie: a resistor). If it doesn't work, try again in another place.
+  The current probe can be used to measure the current going through a lead of most components. Due to SPICE treating wires as nodes, the current probe cannot measure the current flowing through a "wire".\n
+  To use the current probe, you should place it on an end lead/wire of a component (ie: a resistor). If it doesn't work, try again in another place.\n
 
 ## General Improvements
 ### Updated Wires 
