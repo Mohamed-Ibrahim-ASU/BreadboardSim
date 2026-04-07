@@ -45,6 +45,7 @@ private:
 	double Capacitance = 1e-9;
 	double SeriesResistance = 1e-3;
 	double DCResistance = 1e12; 
+	double InitialVoltage = 0.0;
 	double lastT = 0;
 	double usingBE = false;
 };

@@ -11,6 +11,7 @@ int Capacitor::GetNumberOfPins() {
 void Capacitor::SetParameters(ParameterSet params) {
 	Capacitance = params.getDouble("cap", Capacitance);
 	SeriesResistance = params.getDouble("rser", SeriesResistance);
+	InitialVoltage = params.getDouble("ic", InitialVoltage);
 }
 
 double Capacitor::DCFunction(DCSolver *solver, int f) {
@@ -26,32 +27,43 @@ double Capacitor::DCFunction(DCSolver *solver, int f) {
 
 double Capacitor::TransientFunction(TransientSolver *solver, int f) {
 	if (f == 0) {
+		int currentTick = solver->GetCurrentTick();
 
-		double I0 = solver->GetPinCurrent(this, 0, solver->GetCurrentTick() - 1);
+		// Read the history normally
+		double I0 = solver->GetPinCurrent(this, 0, currentTick - 1);
+		double V0 = solver->GetNetVoltage(PinConnections[0], currentTick - 1) - solver->GetNetVoltage(PinConnections[1], currentTick - 1) - SeriesResistance * I0;
+		double DT = solver->GetTimeAtTick(currentTick) - solver->GetTimeAtTick(currentTick - 1);
+		
+		// Overwrite the 0V DC history on the very first transient frame
+		if (currentTick == 1) {
+			V0 = InitialVoltage; 
+		}
+
 		double I = solver->GetPinCurrent(this, 0);
-		double V0 = solver->GetNetVoltage(PinConnections[0], solver->GetCurrentTick() - 1) - solver->GetNetVoltage(PinConnections[1], solver->GetCurrentTick() - 1) - SeriesResistance * I0;
 		double V = solver->GetNetVoltage(PinConnections[0]) - solver->GetNetVoltage(PinConnections[1]) - SeriesResistance * I;
-		double DT = solver->GetTimeAtTick(solver->GetCurrentTick()) - solver->GetTimeAtTick(solver->GetCurrentTick() - 1);
 
 		double L = V;
 		double R;
-		if (solver->GetTimeAtTick(solver->GetCurrentTick()) != lastT) {
-			lastT = solver->GetTimeAtTick(solver->GetCurrentTick());
+       
+		if (solver->GetTimeAtTick(currentTick) != lastT) {
+			lastT = solver->GetTimeAtTick(currentTick);
 			usingBE = false;
 		}
+       
 		if ((fabs(V - V0) > 0.5) || usingBE) {
 			usingBE = true;
+			R = V0 + (DT / Capacitance) * I;          // Backward Euler
 		}
 		else {
-			R = V0 + DT * (I0 + I) / (2 * Capacitance);
+			R = V0 + DT * (I0 + I) / (2 * Capacitance); // Trapezoidal
 		}
-		R = V0 + (DT / Capacitance) * I;
 
-		solver->RequestTimestep(fmax(abs((0.05*Capacitance) / ((I + I0) * DT)), 1e-10));
+		// Failsafe to prevent division by zero explosions
+		double denom = (I + I0) * DT;
+		if (std::abs(denom) < 1e-15) denom = 1e-15; 
+		solver->RequestTimestep(fmax(abs((0.05 * Capacitance) / denom), 1e-10));
 
 		return L - R;
-
-
 	}
 	else {
 		return 0;

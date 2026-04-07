@@ -75,8 +75,11 @@ This is my take on a fork of Breadboard Simulator, I noticed the program was mis
 ### Workaround: Switch the graph mode and then switch back to Per-Probe
 ## ※ Some Op-Amp Pin Names are kinda messed up
 ### Workaround: Bottom Name is correct 
+※ Should be fixed, gonna test l8r h8rs.
 ## ※ Astable Multivibrators using Op-Amps don't work
-### Workaround: I honestly have no idea
+### Workaround: I honestly have no idea 
+※ Should be fixed now, gonna test l8r h8rs. 
+(Simplified Explanation: Added Initial Voltage Property to capacitors, replaced tanh with arctan in OPAMP DC and Transient Functions)
 
 # Future Updates if I ever get around to them
 ### ※ Transfer Function Graph (XY or Input/Output Graph)

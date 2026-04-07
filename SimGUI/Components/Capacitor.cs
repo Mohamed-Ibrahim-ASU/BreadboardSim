@@ -12,6 +12,7 @@ namespace SimGUI
     {
         public bool IsElectrolytic = false;
         private Canvas footprintCanvas = new Canvas();
+        public Quantity InitialVoltageValue;
 
         public Capacitor(Circuit parent, Point origin, bool electrolytic = false)
             : base(parent, origin)
@@ -22,6 +23,10 @@ namespace SimGUI
             ComponentValue = new Quantity("cap", "Capacitance", "F");
             ComponentValue.AllowZero = false;
             ComponentValue.AllowNegative = false;
+            InitialVoltageValue = new Quantity("ic", "Initial Voltage", "V");
+            InitialVoltageValue.AllowZero = true; // 0V is a perfectly valid starting state
+            InitialVoltageValue.AllowNegative = true; 
+            InitialVoltageValue.Val = 0.0; // Default to 0V
             ID = parent.GetNextComponentName("C");
 
             LoadFootprintFromXml(electrolytic ? "capacitor_elec" : "capacitor_np");
@@ -48,7 +53,56 @@ namespace SimGUI
                 else if (textObject.Name == "_Value") textObject.Text = ComponentValue.ToString();
             }
         }
+        // 1. Tell the UI to draw the second textbox
+        protected override bool SetupPropertiesDialog(ComponentProperties dialog)
+        {
+            // Call the base method first so it draws the standard "Capacitance" box
+            bool show = base.SetupPropertiesDialog(dialog);
 
+            // Add our new Initial Voltage box right beneath it
+            dialog.AddQuantity(InitialVoltageValue);
+
+            return show;
+        }
+
+        // 2. Read the user's input when they click "OK"
+        protected override void AfterPropertiesDialog(ComponentProperties dialog)
+        {
+            // Let the base method update the standard Capacitance
+            base.AfterPropertiesDialog(dialog);
+
+            // Because Initial Voltage was the second item added to the window, 
+            // it lives at index [1] in the dialog's parameter list.
+            if (dialog.Parameters.Count > 1)
+            {
+                InitialVoltageValue.Val = dialog.Parameters[1].Val;
+            }
+        }
+
+        // 3. Make sure the voltage saves when you save your circuit file
+        public override Dictionary<string, string> SaveParameters()
+        {
+            // Get the standard save data from the base class
+            Dictionary<string, string> parameters = base.SaveParameters();
+            
+            // Append our custom initial condition
+            parameters["ic"] = InitialVoltageValue.Val.ToString();
+            
+            return parameters;
+        }
+
+        // 4. Make sure the voltage loads when you open a saved circuit
+        public override void LoadParameters(Dictionary<string, string> parameters)
+        {
+            // Let the base class load the standard stuff
+            base.LoadParameters(parameters);
+            
+            // If this save file has an initial condition, load it in
+            if (parameters.ContainsKey("ic"))
+            {
+                InitialVoltageValue.Val = double.Parse(parameters["ic"]);
+            }
+        }
         public override void Render()
         {
             // Draw the stretchable diagonal leads from the LeadedComponent engine
@@ -98,7 +152,7 @@ namespace SimGUI
 
         public override string GenerateNetlist()
         {
-            return "CAP " + ID + " " + ConnectedNets[1] + " " + ConnectedNets[2] + " rser=0.001 cap=" + ComponentValue.Val.ToString();
+            return "CAP " + ID + " " + ConnectedNets[1] + " " + ConnectedNets[2] + " rser=0.001 cap=" + ComponentValue.Val.ToString() + " ic=" + InitialVoltageValue.Val.ToString();
         }
     }
 }
