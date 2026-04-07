@@ -69,6 +69,17 @@ This is my take on a fork of Breadboard Simulator, I noticed the program was mis
 ![CE with Degeneration Breadboard with Function Generator Screenshot](https://mohamed-ibrahim-asu.github.io/bbsim/breadboard1.png)
 
 ![CE with Degeneration Graph Screenshot](https://mohamed-ibrahim-asu.github.io/bbsim/graphview1.png)
+
+# Known Bugs:
+## ※ Removing Probes does not automatically delete them from the graph. 
+### Workaround: Switch the graph mode and then switch back to Per-Probe
+## ※ Some Op-Amp Pin Names are kinda messed up
+### Workaround: Bottom Name is correct 
+## ※ Astable Multivibrators using Op-Amps don't work
+### Workaround: I honestly have no idea
+
+# Future Updates if I ever get around to them
+### ※ Transfer Function Graph (XY or Input/Output Graph)
 _____________________________
 
 This interactive circuit simulator with a breadboard style user interface was created as my A-level Computing project. It is built using a C#+WPF GUI frontend and a C++ backend. Visual Studio 2015

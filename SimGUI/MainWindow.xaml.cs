@@ -293,15 +293,50 @@ namespace SimGUI
                     case 8: return "VCC";
                 }
             }
-            else if (model.Contains("741") || model.Contains("lm358") || model.Contains("lm324") || model.Contains("opamp"))
+            else if (model.Contains("741") || model.Contains("opamp"))
             {
-                 switch(pinNumber) {
-                     case 2: return "Inv. Input (-)";
-                     case 3: return "Non-Inv. Input (+)";
-                     case 4: return "V-";
-                     case 6: return "Output";
-                     case 7: return "V+";
-                 }
+                // Standard Single Op-Amp Pinout (DIP-8)
+                switch(pinNumber) {
+                    case 2: return "Inv. Input (-)";
+                    case 3: return "Non-Inv. Input (+)";
+                    case 4: return "V-";
+                    case 6: return "Output";
+                    case 7: return "V+";
+                }
+            }
+            else if (model.Contains("lm358"))
+            {
+                // Standard Dual Op-Amp Pinout (DIP-8)
+                switch(pinNumber) {
+                    case 1: return "Output A";
+                    case 2: return "Inv. Input A (-)";
+                    case 3: return "Non-Inv. Input A (+)";
+                    case 4: return "V- / Ground";
+                    case 5: return "Non-Inv. Input B (+)";
+                    case 6: return "Inv. Input B (-)";
+                    case 7: return "Output B";
+                    case 8: return "V+";
+                }
+            }
+            else if (model.Contains("lm324"))
+            {
+                // Standard Quad Op-Amp Pinout (DIP-14)
+                switch(pinNumber) {
+                    case 1: return "Output 1";
+                    case 2: return "Inv. Input 1 (-)";
+                    case 3: return "Non-Inv. Input 1 (+)";
+                    case 4: return "V+";
+                    case 5: return "Non-Inv. Input 2 (+)";
+                    case 6: return "Inv. Input 2 (-)";
+                    case 7: return "Output 2";
+                    case 8: return "Output 3";
+                    case 9: return "Inv. Input 3 (-)";
+                    case 10: return "Non-Inv. Input 3 (+)";
+                    case 11: return "V- / Ground";
+                    case 12: return "Non-Inv. Input 4 (+)";
+                    case 13: return "Inv. Input 4 (-)";
+                    case 14: return "Output 4";
+                }
             }
 
             return "Pin " + pinNumber;

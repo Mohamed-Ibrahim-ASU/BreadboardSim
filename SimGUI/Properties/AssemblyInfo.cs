@@ -7,12 +7,12 @@ using System.Windows;
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("Breadboard Simulator")]
+[assembly: AssemblyTitle("Breadboard Simulator Fork")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("David Shah")]
+[assembly: AssemblyCompany("David Shah/Mohamed Ibrahim")]
 [assembly: AssemblyProduct("Breadboard Simulator")]
-[assembly: AssemblyCopyright("Copyright ©  David Shah 2014-2015")]
+[assembly: AssemblyCopyright("Copyright ©  David Shah 2014-2015, Mohamed Ibrahim 2026")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
