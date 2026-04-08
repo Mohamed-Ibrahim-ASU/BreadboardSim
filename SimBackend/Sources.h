@@ -17,6 +17,7 @@ private:
     double Amplitude = 2.0;
     double Frequency = 1.0;
     double Offset = 0.0;
-    int WaveType = 0; // 0=Sine, 1=Square, 2=Triangle
+    int WaveType = 0; // 0=Sine, 1=Square, 2=Triangle, 3=DC
     double InternalR = 0.1; 
+    double StartupTransientFlag = 0.0; 
 };

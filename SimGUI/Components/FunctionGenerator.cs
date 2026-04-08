@@ -13,6 +13,7 @@ namespace SimGUI
         public Quantity Offset = new Quantity("Voff", "DC Magnitude", "V") { Val = 0.0 };
         // Can't use negative numbers, so just using a flag
         public Quantity InvertOffset = new Quantity("Inv", "Invert Offset (0=No, 1=Yes)", "") { Val = 0.0 };
+        public Quantity PowerOnTransient = new Quantity("Startup", "Simulate Power-On Transient (0=No, 1=Yes)", "") { Val = 0.0 };
         public string Waveform = "Sine";
 
         public FunctionGenerator(Circuit parent, Point origin) : base(parent, origin)
@@ -33,6 +34,7 @@ namespace SimGUI
             dialog.AddQuantity(Amplitude);
             dialog.AddQuantity(Offset);
             dialog.AddQuantity(InvertOffset); 
+            dialog.AddQuantity(PowerOnTransient);
             return true;
         }
 
@@ -43,6 +45,7 @@ namespace SimGUI
             Amplitude.Val = dialog.Parameters[1].Val;
             Offset.Val = dialog.Parameters[2].Val;
             InvertOffset.Val = dialog.Parameters[3].Val;
+            PowerOnTransient.Val = dialog.Parameters[4].Val;
             UpdateText();
             ParentCircuit.ParentWindow.UpdatePrompt();
         }
@@ -54,6 +57,7 @@ namespace SimGUI
             p["off"] = Offset.Val.ToString();
             p["inv"] = InvertOffset.Val.ToString();
             p["wave"] = Waveform;
+            p["startup"] = PowerOnTransient.Val.ToString();
             return p;
         }
 
@@ -64,6 +68,7 @@ namespace SimGUI
             if (parameters.ContainsKey("off")) Offset.Val = double.Parse(parameters["off"]);
             if (parameters.ContainsKey("inv")) InvertOffset.Val = double.Parse(parameters["inv"]);
             if (parameters.ContainsKey("wave")) Waveform = parameters["wave"];
+            if (parameters.ContainsKey("startup")) PowerOnTransient.Val = double.Parse(parameters["startup"]);
             UpdateText();
         }
 
@@ -80,7 +85,8 @@ namespace SimGUI
             // If InvertOffset is 1 (or anything greater than 0), multiply by -1. Otherwise, keep it positive.
             double actualOffset = Offset.Val * (InvertOffset.Val > 0 ? -1 : 1);
 
-            return $"V_SINE {ID} {n1} {n2} amp={Amplitude.Val} freq={ComponentValue.Val} off={actualOffset} type={waveType}";
+            return $"V_SINE {ID} {n1} {n2} amp={Amplitude.Val} freq={ComponentValue.Val} off={actualOffset} type={waveType} startup={PowerOnTransient.Val}";
+            
         }
 
         private string FormatValue(double val, string unit)
