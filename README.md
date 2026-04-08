@@ -8,6 +8,8 @@ This is my take on a fork of Breadboard Simulator, I noticed the program was mis
 ## Components
 ### Input Devices - Function Generator
  ※  The function generator can be used to generate sinusoidal, square, or triangle waves of any frequency and amplitude with a DC offset.
+ 
+ ※ Included in the function generator is a "Power-On Transient" Property that allows the circuit to start from 0 and ramp up to the steady state voltage across 5 periods.
   
 ※ When using the function generator, make sure the function generator is grounded and the simulation speed is low enough to allow for proper generation of the functions. 
 
@@ -39,6 +41,9 @@ This is my take on a fork of Breadboard Simulator, I noticed the program was mis
   ※ Leaded components can also be placed diagonally.
 ### Updated Capacitors
  ※  Capacitors now have leads and as such also can be placed between any two nodes, not just two adjacent nodes.
+ ※  Capacitors now have an Initial Voltage Property to allow for the functioning of circuits like astable multivibrators.
+ ※  Setting the initial voltage to 0 will let the simulator skip the "transient" stage and apply the proper DC voltage on the capacitor automatically. 
+ ※  If you want to start the simulation with 0V, set the capacitor voltage to 1pV. 
 
 ### Hover Tooltips
  ※  Hover over any component on the breadboard during simulation to see the current/voltage as well as a summarized tooltip for ICs and other multi-pin components.
@@ -83,6 +88,7 @@ This is my take on a fork of Breadboard Simulator, I noticed the program was mis
 
 # Future Updates if I ever get around to them
 ### ※ Transfer Function Graph (XY or Input/Output Graph)
+### ※ Proper Transient Graphing
 _____________________________
 
 This interactive circuit simulator with a breadboard style user interface was created as my A-level Computing project. It is built using a C#+WPF GUI frontend and a C++ backend. Visual Studio 2015
