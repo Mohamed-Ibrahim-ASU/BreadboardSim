@@ -35,7 +35,7 @@ double Capacitor::TransientFunction(TransientSolver *solver, int f) {
 		double DT = solver->GetTimeAtTick(currentTick) - solver->GetTimeAtTick(currentTick - 1);
 		
 		// Overwrite the 0V DC history on the very first transient frame
-		if (currentTick == 1) {
+		if (currentTick == 1 && InitialVoltage != 0.0) {
 			V0 = InitialVoltage; 
 		}
 
