@@ -2,7 +2,7 @@
 
 This is my take on a fork of Breadboard Simulator, I noticed the program was missing a few features I wanted to use in my Electronics Course, so I created this fork to add them.
 
-## [Download Here](https://mohamed-ibrahim-asu.github.io/bbsim/Breadboard_Sim.zip)
+## [Download Here](https://mohamed-ibrahim-asu.github.io/bbsim/BreadboardSim_(MI).zip)
 
 # Additions
 ## Components
