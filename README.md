@@ -82,25 +82,29 @@ This is my take on a fork of Breadboard Simulator, I noticed the program was mis
 
 ## Screenshots of some of the things I added:
 
-![CE with Degeneration Breadboard with Function Generator Screenshot](https://mohamed-ibrahim-asu.github.io/bbsim/breadboard1.png)
+![CE with Degeneration Breadboard with Function Generator Screenshot](https://mohamed-ibrahim-asu.github.io/bbsim/BreadBoardSim1.png)
 
-![CE with Degeneration Graph Screenshot](https://mohamed-ibrahim-asu.github.io/bbsim/graphview1.png)
+![CE with Degeneration and bypass capacitor Breadboard with Function Generator Screenshot](https://mohamed-ibrahim-asu.github.io/bbsim/BreadBoardSim2.png)
+
+![Simple LPF and Simple Diode Limiter circuit Breadboard showing the XY/IV Characteristics](https://mohamed-ibrahim-asu.github.io/bbsim/BreadBoardSim3.png)
 
 # Known Bugs:
 ## ※ Removing Probes does not automatically delete them from the graph. 
 ### Workaround: Switch the graph mode and then switch back to Per-Probe
 ## ※ Some Op-Amp Pin Names are kinda messed up
 ### Workaround: Bottom Name is correct 
-※ Should be fixed, gonna test l8r h8rs.
+※ Should be fixed
 ## ※ Astable Multivibrators using Op-Amps don't work
 ### Workaround: I honestly have no idea 
-※ Should be fixed now, gonna test l8r h8rs. 
+※ Should be fixed now
 (Simplified Explanation: Added Initial Voltage Property to capacitors, replaced tanh with arctan in OPAMP DC and Transient Functions)
 (Actually, reverted the tanh, but with a minimum epsilon to avoid divide by zero, should be more stable and more accurate.
 ## ※ XY Graph is really laggy on zooming in.
 ### Workaround: Make sure to only zoom in around the 0V point (ie: down to 1nV), but dont zoom in much at 5.012V - it's not that accurate anyways. Just enjoy the shape
 ## ※ XY Graph takes too long to "warm up"
 ### Workaround: Try to lower the simulation speed so less ticks are plotted.
+## ※ No way to reopen XY Graph if you close it
+### Workaround: You need to stop the simulation and rerun it. Sorry
 
 # Future Updates if I ever get around to them
 ### ※ Curve Tracer Graph
