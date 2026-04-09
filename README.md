@@ -34,6 +34,17 @@ This is my take on a fork of Breadboard Simulator, I noticed the program was mis
 
 ※   To use the current probe, you should place it on an end lead/wire of a component (ie: a resistor). If it doesn't work, try again in another place.
 
+### XY Transfer Probe (BETA)
+※ The XY Transfer Probes can be used to plot the Input/Output Characteristics between any two points of voltage on the circuit.
+※ To use the XY Transfer Probes, you select the probe, then select the input node, then the output node. Upon running the simulator, the new XY Graph will popup with the Vout/Vin plot. 
+
+### IV Probe
+※ The IV Probe can be used to plot the Current/Voltage characteristics of any component in the circuit with respect to the voltages and currents going through it in that specific configuration. 
+※ To use the IV Probe, just select the probe and place it on one end of the component you want to analyse. Upon running the XY Graph will popup with the IV characteristics of the components.
+## XY Graph
+※ To make sure the XY and IV Probes are plotted properly, I introduced an XY Graph. 
+※ Upon first running, the graph may need some time to calibrate and autoscale, make sure your simulation speed is fast enough if you would like to see the overall shape of the graph, or slow it down to see it work in real time. 
+※ The graph automatically chooses the "best" starting point for the 0A and 0V axes separately to ensure as much information is displayed as possible, so it is normal that they do not line up most times. It may need some getting used to, but it is intentional.
 ## General Improvements
 ### Updated Wires 
  ※  Wires can now be placed diagonally, and the placement of wires should hopefully be easier.
@@ -85,10 +96,16 @@ This is my take on a fork of Breadboard Simulator, I noticed the program was mis
 ### Workaround: I honestly have no idea 
 ※ Should be fixed now, gonna test l8r h8rs. 
 (Simplified Explanation: Added Initial Voltage Property to capacitors, replaced tanh with arctan in OPAMP DC and Transient Functions)
+(Actually, reverted the tanh, but with a minimum epsilon to avoid divide by zero, should be more stable and more accurate.
+## ※ XY Graph is really laggy on zooming in.
+### Workaround: Make sure to only zoom in around the 0V point (ie: down to 1nV), but dont zoom in much at 5.012V - it's not that accurate anyways. Just enjoy the shape
+## ※ XY Graph takes too long to "warm up"
+### Workaround: Try to lower the simulation speed so less ticks are plotted.
 
 # Future Updates if I ever get around to them
-### ※ Transfer Function Graph (XY or Input/Output Graph)
+### ※ Curve Tracer Graph
 ### ※ Proper Transient Graphing
+### ※ Better documentation and instructions
 _____________________________
 
 This interactive circuit simulator with a breadboard style user interface was created as my A-level Computing project. It is built using a C#+WPF GUI frontend and a C++ backend. Visual Studio 2015

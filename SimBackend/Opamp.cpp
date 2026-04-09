@@ -27,15 +27,17 @@ double Opamp::DCFunction(DCSolver *solver, int f) {
     double Iout = solver->GetPinCurrent(this, 2);
     double Ignd = solver->GetPinCurrent(this, 3);
 
-    // ATAN SOFT-CLIP MATH
-    const double PI = 3.14159265358979323846;
-    double Vclip = (Vsp - Vsm - VosatP - VosatN) / 2.0;
-    double Vmid = (Vsp + Vsm - VosatP + VosatN) / 2.0;
-    double Vdiff = NinvInp - InvInp;
+   // TANH WITH ASYMPTOTIC LEAKAGE
+   double Vclip = (Vsp - Vsm - VosatP - VosatN) / 2.0;
+   double Vmid = (Vsp + Vsm - VosatP + VosatN) / 2.0;
+   double Vdiff = NinvInp - InvInp;
     
-    double arg = (PI / 2.0) * OpenLoopGain * Vdiff;
-    double curve = (2.0 / PI) * atan(arg);
-    double Vo = Vclip * curve + Vmid + Iout * OutputResistance;
+   double arg = OpenLoopGain * Vdiff;
+   double curve = tanh(arg);
+   const double EPSILON = 1e-6; // Prevents singular matrix crashes (zero-derivative)
+    
+   // Calculate output with the microscopic linear leakage term added
+   double Vo = Vclip * curve + Vmid + (EPSILON * Vdiff) + Iout * OutputResistance;
 
     if (f == 0) {
        return ((NinvInp - InvInp) / InputResistance) - Iinp;
@@ -64,15 +66,17 @@ double Opamp::TransientFunction(TransientSolver *solver, int f) {
     double Iout = solver->GetPinCurrent(this, 2);
     double Ignd = solver->GetPinCurrent(this, 3);
 
-    // ATAN SOFT-CLIP MATH (Notice the hacky LastVinp override is deleted!)
-    const double PI = 3.14159265358979323846;
-    double Vclip = (Vsp - Vsm - VosatP - VosatN) / 2.0;
-    double Vmid = (Vsp + Vsm - VosatP + VosatN) / 2.0;
-    double Vdiff = NinvInp - InvInp;
+   // TANH WITH ASYMPTOTIC LEAKAGE
+   double Vclip = (Vsp - Vsm - VosatP - VosatN) / 2.0;
+   double Vmid = (Vsp + Vsm - VosatP + VosatN) / 2.0;
+   double Vdiff = NinvInp - InvInp;
     
-    double arg = (PI / 2.0) * OpenLoopGain * Vdiff;
-    double curve = (2.0 / PI) * atan(arg);
-    double Vo = Vclip * curve + Vmid + Iout * OutputResistance;
+   double arg = OpenLoopGain * Vdiff;
+   double curve = tanh(arg);
+   const double EPSILON = 1e-6; // Prevents singular matrix crashes (zero-derivative)
+    
+   // Calculate output with the microscopic linear leakage term added
+   double Vo = Vclip * curve + Vmid + (EPSILON * Vdiff) + Iout * OutputResistance;
 
     if (f == 0) {
        return ((NinvInp - InvInp) / InputResistance) - Iinp;
@@ -96,14 +100,16 @@ double Opamp::DCDerivative(DCSolver *solver, int f, VariableIdentifier var) {
     double NinvInp = solver->GetNetVoltage(PinConnections[0]);
     double InvInp = solver->GetNetVoltage(PinConnections[1]);
 
-    const double PI = 3.14159265358979323846;
-    double Vclip = (Vsp - Vsm - VosatP - VosatN) / 2.0;
-    double Vdiff = NinvInp - InvInp;
-    double arg = (PI / 2.0) * OpenLoopGain * Vdiff;
-    double curve = (2.0 / PI) * atan(arg);
+   // TANH WITH ASYMPTOTIC LEAKAGE
+   double Vclip = (Vsp - Vsm - VosatP - VosatN) / 2.0;
+   double Vdiff = NinvInp - InvInp;
     
-    // The safely computed derivative!
-    double dVo_dVdiff = (Vclip * OpenLoopGain) / (1.0 + arg * arg);
+   double arg = OpenLoopGain * Vdiff;
+   double curve = tanh(arg);
+   const double EPSILON = 1e-6; // Prevents singular matrix crashes
+    
+   // The safely computed derivative: d(tanh(x))/dx = 1 - tanh^2(x)
+   double dVo_dVdiff = Vclip * OpenLoopGain * (1.0 - curve * curve) + EPSILON;
 
     if (f == 0) {
        if (var.type == var.NET && var.net == PinConnections[0]) return 1.0 / InputResistance;
@@ -143,13 +149,16 @@ double Opamp::TransientDerivative(TransientSolver *solver, int f, VariableIdenti
     double NinvInp = solver->GetNetVoltage(PinConnections[0]);
     double InvInp = solver->GetNetVoltage(PinConnections[1]);
 
-    const double PI = 3.14159265358979323846;
-    double Vclip = (Vsp - Vsm - VosatP - VosatN) / 2.0;
-    double Vdiff = NinvInp - InvInp;
-    double arg = (PI / 2.0) * OpenLoopGain * Vdiff;
-    double curve = (2.0 / PI) * atan(arg);
+   // TANH WITH ASYMPTOTIC LEAKAGE
+   double Vclip = (Vsp - Vsm - VosatP - VosatN) / 2.0;
+   double Vdiff = NinvInp - InvInp;
     
-    double dVo_dVdiff = (Vclip * OpenLoopGain) / (1.0 + arg * arg);
+   double arg = OpenLoopGain * Vdiff;
+   double curve = tanh(arg);
+   const double EPSILON = 1e-6; // Prevents singular matrix crashes
+    
+   // The safely computed derivative: d(tanh(x))/dx = 1 - tanh^2(x)
+   double dVo_dVdiff = Vclip * OpenLoopGain * (1.0 - curve * curve) + EPSILON;
 
     if (f == 0) {
        if (var.type == var.NET && var.net == PinConnections[0]) return 1.0 / InputResistance;

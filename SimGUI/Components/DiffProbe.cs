@@ -68,44 +68,71 @@ namespace SimGUI
                 }
             }
 
-            double renderLength = Math.Abs(Length);
+            double sc = Constants.ScaleFactor;
             PinPositions[1] = new Point(0, 0);
-            Point p2 = (orientation == Orientation.Horizontal) ? new Point(renderLength, 0) : new Point(0, renderLength);
-            PinPositions[2] = p2;
+
+            // Calculate exact high-precision magnitude to bypass base class Length truncation
+            double exactLength = Length;
+            if (Is2D)
+            {
+                Point gridP2 = GetPinPositions()[2];
+                exactLength = Math.Sqrt(gridP2.X * gridP2.X + gridP2.Y * gridP2.Y);
+            }
+
+            // Project strictly horizontally (or vertically) for base class RotateTransform
+            double p2X = (orientation == Orientation.Horizontal) ? exactLength : 0;
+            double p2Y = (orientation == Orientation.Horizontal) ? 0 : exactLength;
+            PinPositions[2] = new Point(p2X, p2Y);
+
+            Point p1 = PinPositions[1];
+            Point p2 = PinPositions[2];
 
             // --- RED RING (+) ---
-            Children.Add(CreateProbeMarker(new Point(0, 0), Brushes.Red, "+", ProbeColour));
+            AddMarkerDirect(p1, Brushes.Red, "+", ProbeColour, sc);
 
             // --- BLACK RING (-) ---
-            Children.Add(CreateProbeMarker(p2, Brushes.Black, "-", ProbeColour));
+            AddMarkerDirect(p2, Brushes.Black, "-", ProbeColour, sc);
         }
 
-        private UIElement CreateProbeMarker(Point pos, Brush border, string sign, Brush fill)
+        private void AddMarkerDirect(Point pos, Brush border, string sign, Brush fill, double sc)
         {
-            Canvas marker = new Canvas();
-            
-            Path ring = new Path();
-            ring.Stroke = border;
-            ring.StrokeThickness = 0.15;
-            ring.Fill = (fill == Brushes.Transparent) ? fill : new SolidColorBrush(Color.FromArgb(180, ((SolidColorBrush)fill).Color.R, ((SolidColorBrush)fill).Color.G, ((SolidColorBrush)fill).Color.B));
-            ring.Data = new EllipseGeometry(new Point(0, 0), 0.35, 0.35);
-            marker.Children.Add(ring);
+            double cx = pos.X * sc;
+            double cy = pos.Y * sc;
+            double r  = 0.35 * sc;
+            double sw = 0.08 * sc;
+            double sl = 0.15 * sc; // half-length of the symbol lines
 
-            Path symbol = new Path();
-            symbol.Stroke = Brushes.White;
-            symbol.StrokeThickness = 0.08;
-            symbol.StrokeStartLineCap = PenLineCap.Round;
-            symbol.StrokeEndLineCap = PenLineCap.Round;
+            Brush ringFill = (fill == Brushes.Transparent) ? fill : new SolidColorBrush(Color.FromArgb(180, ((SolidColorBrush)fill).Color.R, ((SolidColorBrush)fill).Color.G, ((SolidColorBrush)fill).Color.B));
 
-            if (sign == "+") symbol.Data = Geometry.Parse("M -0.15,0 L 0.15,0 M 0,-0.15 L 0,0.15");
-            else symbol.Data = Geometry.Parse("M -0.15,0 L 0.15,0");
+            // Ring (Clickable hit-box)
+            Children.Add(new Path
+            {
+                Stroke = border,
+                StrokeThickness = 0.15 * sc,
+                Fill = ringFill,
+                Data = new EllipseGeometry(new Point(cx, cy), r, r)
+            });
 
-            marker.Children.Add(symbol);
-            marker.RenderTransform = new ScaleTransform(Constants.ScaleFactor, Constants.ScaleFactor);
-            Canvas.SetLeft(marker, pos.X * Constants.ScaleFactor);
-            Canvas.SetTop(marker, pos.Y * Constants.ScaleFactor);
-            
-            return marker;
+            // Symbol
+            Path symbol = new Path
+            {
+                Stroke = Brushes.White,
+                StrokeThickness = sw,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round,
+                IsHitTestVisible = false // Keep the inner cross/line unclickable
+            };
+
+            if (sign == "+") 
+            {
+                symbol.Data = Geometry.Parse($"M {(cx - sl):F2},{cy:F2} L {(cx + sl):F2},{cy:F2} M {cx:F2},{(cy - sl):F2} L {cx:F2},{(cy + sl):F2}");
+            }
+            else 
+            {
+                symbol.Data = Geometry.Parse($"M {(cx - sl):F2},{cy:F2} L {(cx + sl):F2},{cy:F2}");
+            }
+
+            Children.Add(symbol);
         }
 
         public override string GenerateNetlist() { return ""; }

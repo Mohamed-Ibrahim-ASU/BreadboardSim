@@ -79,6 +79,8 @@
     <Compile Include="Components\FunctionGenerator.cs" />
     <Compile Include="Components\DiffProbe.cs" />
     <Compile Include="Components\CurrentProbe.cs" />
+    <Compile Include="Components\XYProbe.cs" />
+    <Compile Include="Components\IVProbe.cs" />
     <Compile Include="Components\Resistor.cs" />
     <Compile Include="Components\Switch.cs" />
     <Compile Include="Components\Transistor.cs" />
@@ -97,6 +99,9 @@
     <Compile Include="GraphView.xaml.cs">
       <DependentUpon>GraphView.xaml</DependentUpon>
     </Compile>
+    <Compile Include="XYGraphView.xaml.cs">
+      <DependentUpon>XYGraphView.xaml</DependentUpon>
+    </Compile>
     <Compile Include="LeadedComponent.cs" />
     <Compile Include="Quantity.cs" />
     <Compile Include="Util.cs" />
@@ -113,6 +118,10 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="GraphView.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="XYGraphView.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

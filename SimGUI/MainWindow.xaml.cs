@@ -86,6 +86,7 @@ namespace SimGUI
                                            };
 
         public GraphView CurrentGraph = null;
+        public XYGraphView CurrentXYGraph = null;
 
         public MainWindow()
         {
@@ -212,6 +213,16 @@ namespace SimGUI
             currentProbe_item.Header = currentProbe;
             DevicePicker.Items.Add(currentProbe_item);
 
+            ComponentData xyProbe = new ComponentData("XYProbe", 0, "XY Transfer Probe");
+            TreeViewItem xyProbe_item = new TreeViewItem();
+            xyProbe_item.Header = xyProbe;
+            DevicePicker.Items.Add(xyProbe_item);
+
+            ComponentData ivProbe = new ComponentData("IVProbe", 0, "I/V Curve Probe");
+            TreeViewItem ivProbe_item = new TreeViewItem();
+            ivProbe_item.Header = ivProbe;
+            DevicePicker.Items.Add(ivProbe_item);
+            
             SetNumberOfBreadboards(1);
 
             // PERFORMANCE FIX: Decreased from 50ms to 16ms to achieve a smooth 60 FPS refresh rate
@@ -444,6 +455,8 @@ private void UpdateHoverBox(Point mousePos)
                 else if (tt.Content is TextBlock ttb) devTip = ttb.Text;
             }
 
+            if (parentComponent is XYProbe) devTip = "[Parametric Trace]";
+
             string livePotPct = "";
             if (parentComponent != null && parentComponent.ComponentType.ToLower().Contains("potentiometer"))
             {
@@ -513,6 +526,25 @@ private void UpdateHoverBox(Point mousePos)
                     else
                     {
                         finalText = "Differential Probe\n(Connect both leads)";
+                    }
+                }
+                else if (parentComponent is XYProbe xp) 
+                {
+                    if (simHasData && xp.ConnectedNets.ContainsKey(1) && xp.ConnectedNets.ContainsKey(2))
+                    {
+                        int vInId = CurrentSimulator.GetNetVoltageVarId(xp.ConnectedNets[1]);
+                        int vOutId = CurrentSimulator.GetNetVoltageVarId(xp.ConnectedNets[2]);
+                        if (vInId != -1 && vOutId != -1)
+                        {
+                            Quantity qIn = new Quantity("v", "V_in", "V") { Val = CurrentSimulator.GetValueOfVar(vInId, 0) };
+                            Quantity qOut = new Quantity("v", "V_out", "V") { Val = CurrentSimulator.GetValueOfVar(vOutId, 0) };
+                            
+                            finalText = $"XY Transfer Probe\nX-Axis (Input): {qIn.ToFixedString()}\nY-Axis (Output): {qOut.ToFixedString()}";
+                        }
+                    }
+                    else
+                    {
+                        finalText = "XY Transfer Probe\n(Connect both I and O leads)";
                     }
                 }
                 else if (parentComponent is CurrentProbe cp)
@@ -669,7 +701,7 @@ private void UpdateHoverBox(Point mousePos)
                                 if (isSimple2Pin)
                                 {
                                     string voltageDropText = "";
-                                    if (!isVoltageSource && parentComponent.ConnectedNets != null && parentComponent.ConnectedNets.ContainsKey(1) && parentComponent.ConnectedNets.ContainsKey(2))
+                                    if (!isVoltageSource && !(parentComponent is XYProbe) && parentComponent.ConnectedNets != null && parentComponent.ConnectedNets.ContainsKey(1) && parentComponent.ConnectedNets.ContainsKey(2))
                                     {
                                         int v1Id = CurrentSimulator.GetNetVoltageVarId(parentComponent.ConnectedNets[1]);
                                         int v2Id = CurrentSimulator.GetNetVoltageVarId(parentComponent.ConnectedNets[2]);
@@ -873,7 +905,7 @@ private void UpdateHoverBox(Point mousePos)
         }
 
         if (type != "Switch" && type != "Potentiometer" && type != "LDR"
-            && type != "CurrentProbe" && type != "DiffProbe" && type != "Probe")
+            && type != "CurrentProbe" && type != "DiffProbe" && type != "Probe" && type != "XYProbe")
         {
             valSum += c.ComponentValue.Val;
         }
@@ -911,6 +943,12 @@ private void UpdateHoverBox(Point mousePos)
             {
                 CurrentGraph.Close();
                 CurrentGraph = null;
+            }
+            if (CurrentXYGraph != null)
+            {
+                CurrentXYGraph.ForceClose = true;
+                CurrentXYGraph.Close();
+                CurrentXYGraph = null;
             }
             circuit.ClearUndoQueue();
             circuit.ClearCircuit(); 
@@ -999,9 +1037,10 @@ private void UpdateHoverBox(Point mousePos)
             if (CurrentSimulator.SimRunning)
             {
                 int newLines = CurrentSimulator.Update();
-                if (newLines > 0 && CurrentSimulator.Results != null && CurrentSimulator.GetNumberOfTicks() >= 5 && CurrentGraph != null)
+                if (newLines > 0 && CurrentSimulator.Results != null && CurrentSimulator.GetNumberOfTicks() >= 5)
                 {
-                    CurrentGraph.PlotAll();
+                    if (CurrentGraph != null) CurrentGraph.PlotAll();
+                    if (CurrentXYGraph != null) CurrentXYGraph.PlotAll();
                 }
 
                 NumberOfUpdates++;
@@ -1185,6 +1224,66 @@ private void UpdateHoverBox(Point mousePos)
                         }
                     }
                 }
+
+              // ── Parametric (XY & IV) Probes ─────────────────────────────────────────
+                var xyProbes = circuit.Components.OfType<XYProbe>().ToList();
+                var ivProbes = circuit.Components.OfType<IVProbe>().ToList();
+
+                if (xyProbes.Count > 0 || ivProbes.Count > 0)
+                {
+                    if (CurrentXYGraph == null)
+                        CurrentXYGraph = new XYGraphView();
+                    else if (!seamless)
+                        CurrentXYGraph.ResetAll();
+
+                    if (!seamless) CurrentXYGraph.StartSim(CurrentSimulator);
+
+                    // 1. Process standard XY Probes (V/V)
+                    foreach (XYProbe xp in xyProbes)
+                    {
+                        int inId = xp.ConnectedNets.ContainsKey(1) ? CurrentSimulator.GetNetVoltageVarId(xp.ConnectedNets[1]) : -1;
+                        int outId = xp.ConnectedNets.ContainsKey(2) ? CurrentSimulator.GetNetVoltageVarId(xp.ConnectedNets[2]) : -1;
+                        
+                        if (seamless) {
+                            CurrentXYGraph.UpdateXYTrace(xp.ID, inId, -1, outId);
+                        } else {
+                            Brush assignedColour = CurrentXYGraph.AddXYTrace(xp.ID, inId, -1, outId, xp.ProbeColour);
+                            if (xp.ProbeColour == Brushes.Transparent) xp.SetProbeColour(assignedColour);
+                            numberOfTraces++;
+                        }
+                    }
+
+                    // 2. Process new IV Probes (I/V)
+                    foreach (IVProbe ivp in ivProbes)
+                    {
+                        ivp.BindTarget(circuit);
+                        
+                        Component target = circuit.Components.FirstOrDefault(c => c.ID == ivp.TargetComponentId);
+                        if (target != null)
+                        {
+                            int v1Id = target.ConnectedNets.ContainsKey(1) ? CurrentSimulator.GetNetVoltageVarId(target.ConnectedNets[1]) : -1;
+                            int v2Id = target.ConnectedNets.ContainsKey(2) ? CurrentSimulator.GetNetVoltageVarId(target.ConnectedNets[2]) : -1;
+                            int iId = CurrentSimulator.GetComponentPinCurrentVarId(ivp.TargetComponentId, ivp.TargetPinNumber);
+
+                            bool invertY = (ivp.TargetPinNumber == 2); 
+
+                            if (seamless) {
+                                CurrentXYGraph.UpdateXYTrace(ivp.ID, v1Id, v2Id, iId);
+                            } else {
+                                Brush assignedColour = CurrentXYGraph.AddXYTrace(
+                                    ivp.ID, v1Id, v2Id, iId, ivp.ProbeColour, 
+                                    XYGraphView.AxisUnit.Volts, XYGraphView.AxisUnit.Amps, invertY
+                                );
+                                if (ivp.ProbeColour == Brushes.Transparent) ivp.SetProbeColour(assignedColour);
+                                numberOfTraces++;
+                            }
+                        }
+                    }
+
+                    if (!seamless && !CurrentXYGraph.IsVisible) CurrentXYGraph.Show();
+                }
+                // ────────────────────────────────────────────────────────────────────────
+
                 
                 if(numberOfTraces > 0 && CurrentGraph != null && !CurrentGraph.IsVisible) CurrentGraph.Show();
                 if (!UpdateTimer.IsEnabled) UpdateTimer.Start();
@@ -1317,6 +1416,8 @@ private void UpdateHoverBox(Point mousePos)
                 CurrentSimulator.Stop();
                 if (CurrentGraph != null)
                     CurrentGraph.Close();
+                if (CurrentXYGraph != null)
+                    CurrentXYGraph.Close();
             }
             else
             {

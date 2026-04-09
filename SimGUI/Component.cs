@@ -681,6 +681,12 @@ namespace SimGUI
                 case "CurrentProbe":
                     newComponent = new CurrentProbe(parent, origin);
                     break;
+                case "XYProbe":
+                    newComponent = new XYProbe(parent, origin);
+                    break;
+                case "IVProbe":
+                    newComponent = new IVProbe(parent, origin);
+                    break;
             }
             if (newComponent != null)
             {

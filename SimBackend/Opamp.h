@@ -27,7 +27,7 @@ public:
 	void SetParameters(ParameterSet params);
 private:
 	double InputResistance = 1e6; //Input resistance
-	double OpenLoopGain = 1e3; //Open loop gain
+	double OpenLoopGain = 1e5; //Open loop gain
 
 	double OutputResistance = 0.001; //Output resistance
 	double VosatP = 0; //Positive output saturation voltage
