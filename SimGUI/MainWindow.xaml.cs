@@ -253,10 +253,16 @@ namespace SimGUI
             if (typeName.Contains("transistor") || compName.Contains("transistor"))
             {
                 if (compName.Contains("mosfet")) {
-                    if (pinNumber == 1) return "Source";
-                    if (pinNumber == 2) return "Gate";
-                    if (pinNumber == 3) return "Drain";
-                } 
+                    if (model.ToLower().Contains("irf530")) {
+                        if (pinNumber == 1) return "Gate";
+                        if (pinNumber == 2) return "Drain";
+                        if (pinNumber == 3) return "Source";
+                    } else {
+                        if (pinNumber == 1) return "Source";
+                        if (pinNumber == 2) return "Gate";
+                        if (pinNumber == 3) return "Drain";
+                    }
+                }
                 else if (model.ToLower().Contains("bc639")) { 
                     if (pinNumber == 1) return "Emitter";   
                     if (pinNumber == 2) return "Collector"; 
@@ -551,12 +557,36 @@ private void UpdateHoverBox(Point mousePos)
                 {
                     if (simHasData && cp.TargetComponentId != null)
                     {
-                        int cId = CurrentSimulator.GetComponentPinCurrentVarId(cp.TargetComponentId, cp.TargetPinNumber);
+                        int simPinTarget = cp.TargetPinNumber;
+                        Component targetComp = circuit.Components.FirstOrDefault(c => c.ID == cp.TargetComponentId);
+
+                        if (targetComp != null && targetComp.ComponentType.ToLower().Contains("transistor") && !targetComp.ComponentType.ToLower().Contains("mosfet"))
+                        {
+                            if (targetComp.ComponentModel != null && targetComp.ComponentModel.ToLower().Contains("bc639"))
+                            {
+                                // BC639 Physical: 1=E, 2=C, 3=B 
+                                // Netlist expects: 1=C, 2=B, 3=E
+                                if (cp.TargetPinNumber == 1) simPinTarget = 3;      // Emitter
+                                else if (cp.TargetPinNumber == 2) simPinTarget = 1; // Collector
+                                else if (cp.TargetPinNumber == 3) simPinTarget = 2; // Base
+                            }
+                            else
+                            {
+                                // Standard BJT Physical (like 2N2222): 1=E, 2=B, 3=C
+                                // Netlist expects: 1=C, 2=B, 3=E
+                                if (cp.TargetPinNumber == 1) simPinTarget = 3;      // Emitter
+                                else if (cp.TargetPinNumber == 2) simPinTarget = 2; // Base
+                                else if (cp.TargetPinNumber == 3) simPinTarget = 1; // Collector
+                            }
+                        }
+
+                        int cId = CurrentSimulator.GetComponentPinCurrentVarId(cp.TargetComponentId, simPinTarget);
                         if (cId != -1)
                         {
-                            double iVal = Math.Abs(CurrentSimulator.GetValueOfVar(cId, 0));
-                            Quantity qI = new Quantity("i", "Current", "A") { Val = iVal };
-                            finalText = $"Current Probe (-> {cp.TargetComponentId} Pin {cp.TargetPinNumber})\nCurrent: {qI.ToFixedString()}";
+                            double rawCurrent = CurrentSimulator.GetValueOfVar(cId, 0);
+                            string direction = rawCurrent > 0 ? "(in)" : "(out)";
+                            Quantity qI = new Quantity("i", "Current", "A") { Val = Math.Abs(rawCurrent) };
+                            finalText = $"Current Probe (-> {cp.TargetComponentId} Pin {cp.TargetPinNumber})\nCurrent: {qI.ToFixedString()} {direction}";
                         }
                     }
                     else
@@ -669,13 +699,55 @@ private void UpdateHoverBox(Point mousePos)
 
                                 if (!devProvidedCurrent)
                                 {
-                                    int currentVarId = CurrentSimulator.GetComponentPinCurrentVarId(parentComponent.ID, pinNumber);
+                                    int simPinTarget = pinNumber; // Fallback for standard components
+
+                                    if (parentComponent.ComponentType.ToLower().Contains("transistor") && !parentComponent.ComponentType.ToLower().Contains("mosfet"))
+                                    {
+                                        if (parentComponent.ComponentModel != null && parentComponent.ComponentModel.ToLower().Contains("bc639"))
+                                        {
+                                            // BC639 Physical: 1=E, 2=C, 3=B 
+                                            // Netlist expects: 1=C, 2=B, 3=E
+                                            if (pinNumber == 1) simPinTarget = 3;      // Emitter
+                                            else if (pinNumber == 2) simPinTarget = 1; // Collector
+                                            else if (pinNumber == 3) simPinTarget = 2; // Base
+                                        }
+                                        else
+                                        {
+                                            // Standard BJT Physical: 1=E, 2=B, 3=C
+                                            // Netlist expects: 1=C, 2=B, 3=E
+                                            if (pinNumber == 1) simPinTarget = 3;      // Emitter
+                                            else if (pinNumber == 2) simPinTarget = 2; // Base (Matches perfectly)
+                                            else if (pinNumber == 3) simPinTarget = 1; // Collector
+                                        }
+                                    }
+                                    else if (parentComponent.ComponentType.ToLower().Contains("mosfet"))
+                                    {
+                                        if (parentComponent.ComponentModel != null && parentComponent.ComponentModel.ToLower().Contains("irf530"))
+                                        {
+                                            // IRF530 Physical: 1=Gate, 2=Drain, 3=Source
+                                            // Netlist expects: 1=Source, 2=Gate, 3=Drain
+                                            if (pinNumber == 1) simPinTarget = 2;      // Gate
+                                            else if (pinNumber == 2) simPinTarget = 3; // Drain
+                                            else if (pinNumber == 3) simPinTarget = 1; // Source
+                                        }
+                                        else
+                                        {
+                                            // 2N7000 Physical: 1=Source, 2=Gate, 3=Drain
+                                            // Netlist expects: 1=Source, 2=Gate, 3=Drain (Matches perfectly)
+                                            simPinTarget = pinNumber; 
+                                        }
+                                    }
+
+                                    int currentVarId = CurrentSimulator.GetComponentPinCurrentVarId(parentComponent.ID, simPinTarget);
                                     if (currentVarId != -1)
                                     {
+                                        double rawCurrent = CurrentSimulator.GetValueOfVar(currentVarId, 0);
+                                        string direction = rawCurrent > 0 ? "(in)" : "(out)";
+
                                         Quantity compCurrent = new Quantity("i", "Current", "A");
-                                        compCurrent.Val = Math.Abs(CurrentSimulator.GetValueOfVar(currentVarId, 0));
+                                        compCurrent.Val = Math.Abs(rawCurrent);
                                         if (!string.IsNullOrEmpty(finalText)) finalText += "\n";
-                                        finalText += $"Current: {compCurrent.ToFixedString()}";
+                                        finalText += $"Current: {compCurrent.ToFixedString()} {direction}";
                                     }
                                     else if (isPot && potValid)
                                     {
@@ -788,12 +860,55 @@ private void UpdateHoverBox(Point mousePos)
                                                 }
                                             }
                                             
-                                            int currentVarId = CurrentSimulator.GetComponentPinCurrentVarId(parentComponent.ID, pNum);
+                                            int simPinTarget = pNum; // Fallback for resistors, caps, etc.
+
+                                            if (parentComponent.ComponentType.ToLower().Contains("transistor") && !parentComponent.ComponentType.ToLower().Contains("mosfet"))
+                                            {
+                                                if (parentComponent.ComponentModel != null && parentComponent.ComponentModel.ToLower().Contains("bc639"))
+                                                {
+                                                    // BC639 Physical: 1=E, 2=C, 3=B 
+                                                    // Netlist expects: 1=C, 2=B, 3=E
+                                                    if (pNum == 1) simPinTarget = 3;      // Emitter
+                                                    else if (pNum == 2) simPinTarget = 1; // Collector
+                                                    else if (pNum == 3) simPinTarget = 2; // Base
+                                                }
+                                                else
+                                                {
+                                                    // Standard BJT Physical (like 2N2222): 1=E, 2=B, 3=C
+                                                    // Netlist expects: 1=C, 2=B, 3=E
+                                                    if (pNum == 1) simPinTarget = 3;      // Emitter
+                                                    else if (pNum == 2) simPinTarget = 2; // Base
+                                                    else if (pNum == 3) simPinTarget = 1; // Collector
+                                                }
+                                            }
+                                            else if (parentComponent.ComponentType.ToLower().Contains("mosfet"))
+                                            {
+                                                if (parentComponent.ComponentModel != null && parentComponent.ComponentModel.ToLower().Contains("irf530"))
+                                                {
+                                                    // IRF530 Physical: 1=Gate, 2=Drain, 3=Source
+                                                    // Netlist expects: 1=Source, 2=Gate, 3=Drain
+                                                    if (pNum == 1) simPinTarget = 2;      // Gate
+                                                    else if (pNum == 2) simPinTarget = 3; // Drain
+                                                    else if (pNum == 3) simPinTarget = 1; // Source
+                                                }
+                                                else
+                                                {
+                                                    // 2N7000 Physical: 1=Source, 2=Gate, 3=Drain
+                                                    // Netlist expects: 1=Source, 2=Gate, 3=Drain (Matches perfectly)
+                                                    simPinTarget = pNum; 
+                                                }
+                                            }
+                                            
+
+                                            int currentVarId = CurrentSimulator.GetComponentPinCurrentVarId(parentComponent.ID, simPinTarget);
                                             if (currentVarId != -1)
                                             {
+                                                double rawCurrent = CurrentSimulator.GetValueOfVar(currentVarId, 0);
+                                                string direction = rawCurrent > 0 ? "(in)" : "(out)";
+
                                                 Quantity compCurrent = new Quantity("i", "Current", "A");
-                                                compCurrent.Val = Math.Abs(CurrentSimulator.GetValueOfVar(currentVarId, 0));
-                                                pData += $" | {compCurrent.ToFixedString()}";
+                                                compCurrent.Val = Math.Abs(rawCurrent);
+                                                pData += $" | {compCurrent.ToFixedString()} {direction}";
                                             }
                                             else if (isPot && potValid)
                                             {
@@ -1198,32 +1313,73 @@ private void UpdateHoverBox(Point mousePos)
                     }
                 }
 
-                if (seamless && CurrentGraph != null) 
-                {
-                    foreach (CurrentProbe cp in circuit.Components.OfType<CurrentProbe>()) 
-                    {
-                        cp.BindTarget(circuit);
-                        int varId = CurrentSimulator.GetComponentPinCurrentVarId(cp.TargetComponentId, cp.TargetPinNumber);
-                        CurrentGraph.UpdateTraceMapping(cp.ID, varId);
-                    }
-                } 
-                else 
-                {
-                    foreach (CurrentProbe cp in circuit.Components.OfType<CurrentProbe>())
-                    {
-                        cp.BindTarget(circuit);
-                        Trace t = new Trace();
-                        int varId = CurrentSimulator.GetComponentPinCurrentVarId(cp.TargetComponentId, cp.TargetPinNumber);
-                        Brush savedColor = cp.ProbeColour;
-                        
-                        if (CurrentGraph != null && CurrentGraph.AddTrace(cp.ID, varId, ref t))
-                        {
-                            numberOfTraces++; 
-                            if (savedColor != Brushes.Transparent) CurrentGraph.UpdateTraceMapping(cp.ID, varId, -1, savedColor);
-                            else cp.SetProbeColour(t.TraceBrush); 
-                        }
-                    }
-                }
+               if (seamless && CurrentGraph != null) 
+{
+    foreach (CurrentProbe cp in circuit.Components.OfType<CurrentProbe>()) 
+    {
+        cp.BindTarget(circuit);
+        int simPinTarget = cp.TargetPinNumber;
+        Component targetComp = circuit.Components.FirstOrDefault(c => c.ID == cp.TargetComponentId);
+        
+        if (targetComp != null && targetComp.ComponentType.ToLower().Contains("transistor") && !targetComp.ComponentType.ToLower().Contains("mosfet"))
+        {
+            if (targetComp.ComponentModel != null && targetComp.ComponentModel.ToLower().Contains("bc639")) {
+                if (cp.TargetPinNumber == 1) simPinTarget = 3; else if (cp.TargetPinNumber == 2) simPinTarget = 1; else if (cp.TargetPinNumber == 3) simPinTarget = 2;
+            } else {
+                if (cp.TargetPinNumber == 1) simPinTarget = 3; else if (cp.TargetPinNumber == 2) simPinTarget = 2; else if (cp.TargetPinNumber == 3) simPinTarget = 1;
+            }
+        }
+        
+        int varId = CurrentSimulator.GetComponentPinCurrentVarId(cp.TargetComponentId, simPinTarget);
+        CurrentGraph.UpdateTraceMapping(cp.ID, varId);
+    }
+} 
+else 
+{
+    foreach (CurrentProbe cp in circuit.Components.OfType<CurrentProbe>())
+    {
+        cp.BindTarget(circuit);
+        int simPinTarget = cp.TargetPinNumber;
+        Component targetComp = circuit.Components.FirstOrDefault(c => c.ID == cp.TargetComponentId);
+        
+        if (targetComp != null && targetComp.ComponentType.ToLower().Contains("transistor") && !targetComp.ComponentType.ToLower().Contains("mosfet"))
+        {
+            if (targetComp.ComponentModel != null && targetComp.ComponentModel.ToLower().Contains("bc639")) {
+                if (cp.TargetPinNumber == 1) simPinTarget = 3; else if (cp.TargetPinNumber == 2) simPinTarget = 1; else if (cp.TargetPinNumber == 3) simPinTarget = 2;
+            } else {
+                if (cp.TargetPinNumber == 1) simPinTarget = 3; else if (cp.TargetPinNumber == 2) simPinTarget = 2; else if (cp.TargetPinNumber == 3) simPinTarget = 1;
+            }
+        }
+        else if (targetComp.ComponentType.ToLower().Contains("mosfet"))
+        {
+            if (targetComp.ComponentModel != null && targetComp.ComponentModel.ToLower().Contains("irf530"))
+            {
+                // IRF530 Physical: 1=Gate, 2=Drain, 3=Source
+                // Netlist expects: 1=Source, 2=Gate, 3=Drain
+                if (cp.TargetPinNumber == 1) simPinTarget = 2;      // Gate
+                else if (cp.TargetPinNumber == 2) simPinTarget = 3; // Drain
+                else if (cp.TargetPinNumber == 3) simPinTarget = 1; // Source
+            }
+            else
+            {
+                // 2N7000 Physical: 1=Source, 2=Gate, 3=Drain
+                // Netlist expects: 1=Source, 2=Gate, 3=Drain (Matches perfectly)
+                simPinTarget = cp.TargetPinNumber; 
+            }
+        }
+
+        Trace t = new Trace();
+        int varId = CurrentSimulator.GetComponentPinCurrentVarId(cp.TargetComponentId, simPinTarget);
+        Brush savedColor = cp.ProbeColour;
+        
+        if (CurrentGraph != null && CurrentGraph.AddTrace(cp.ID, varId, ref t))
+        {
+            numberOfTraces++; 
+            if (savedColor != Brushes.Transparent) CurrentGraph.UpdateTraceMapping(cp.ID, varId, -1, savedColor);
+            else cp.SetProbeColour(t.TraceBrush); 
+        }
+    }
+}
 
               // ── Parametric (XY & IV) Probes ─────────────────────────────────────────
                 var xyProbes = circuit.Components.OfType<XYProbe>().ToList();
@@ -1263,7 +1419,35 @@ private void UpdateHoverBox(Point mousePos)
                         {
                             int v1Id = target.ConnectedNets.ContainsKey(1) ? CurrentSimulator.GetNetVoltageVarId(target.ConnectedNets[1]) : -1;
                             int v2Id = target.ConnectedNets.ContainsKey(2) ? CurrentSimulator.GetNetVoltageVarId(target.ConnectedNets[2]) : -1;
-                            int iId = CurrentSimulator.GetComponentPinCurrentVarId(ivp.TargetComponentId, ivp.TargetPinNumber);
+
+                            int simPinTarget = ivp.TargetPinNumber;
+                            if (target != null && target.ComponentType.ToLower().Contains("transistor") && !target.ComponentType.ToLower().Contains("mosfet"))
+                            {
+                                if (target.ComponentModel != null && target.ComponentModel.ToLower().Contains("bc639")) {
+                                    if (ivp.TargetPinNumber == 1) simPinTarget = 3; else if (ivp.TargetPinNumber == 2) simPinTarget = 1; else if (ivp.TargetPinNumber == 3) simPinTarget = 2;
+                                } else {
+                                    if (ivp.TargetPinNumber == 1) simPinTarget = 3; else if (ivp.TargetPinNumber == 2) simPinTarget = 2; else if (ivp.TargetPinNumber == 3) simPinTarget = 1;
+                                }
+                            }
+                            else if (target.ComponentType.ToLower().Contains("mosfet"))
+                            {
+                                if (target.ComponentModel != null && target.ComponentModel.ToLower().Contains("irf530"))
+                                {
+                                    // IRF530 Physical: 1=Gate, 2=Drain, 3=Source
+                                    // Netlist expects: 1=Source, 2=Gate, 3=Drain
+                                    if (ivp.TargetPinNumber == 1) simPinTarget = 2;      // Gate
+                                    else if (ivp.TargetPinNumber == 2) simPinTarget = 3; // Drain
+                                    else if (ivp.TargetPinNumber == 3) simPinTarget = 1; // Source
+                                }
+                                else
+                                {
+                                    // 2N7000 Physical: 1=Source, 2=Gate, 3=Drain
+                                    // Netlist expects: 1=Source, 2=Gate, 3=Drain (Matches perfectly)
+                                    simPinTarget = ivp.TargetPinNumber; 
+                                }
+                            }
+
+                            int iId = CurrentSimulator.GetComponentPinCurrentVarId(ivp.TargetComponentId, simPinTarget);
 
                             bool invertY = (ivp.TargetPinNumber == 2); 
 
