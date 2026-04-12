@@ -188,9 +188,21 @@ namespace SimGUI
                         newPosition = RenderTransform.Transform(newPosition);
                         newPosition = new Point(newPosition.X + ComponentPosition.X, newPosition.Y + ComponentPosition.Y);
                         Point snappedPosition = Util.snap(newPosition, Constants.ScaleFactor);
+    
+                        // 1. Calculate the exact delta (distance moved)
+                        double deltaX = snappedPosition.X - ComponentPosition.X;
+                        double deltaY = snappedPosition.Y - ComponentPosition.Y;
+    
+                        // 2. Update the primary position
                         ComponentPosition = snappedPosition;
                         Canvas.SetLeft(this, ComponentPosition.X);
                         Canvas.SetTop(this, ComponentPosition.Y);
+    
+                        // 3. If it's a leaded component, shift the EndPoint by the same delta!
+                        if (this is LeadedComponent lc)
+                        {
+                            lc.EndPoint = new Point(lc.EndPoint.X + deltaX, lc.EndPoint.Y + deltaY);
+                        }
                     }
                 }
             }
@@ -674,7 +686,6 @@ namespace SimGUI
                 case "Function Generator":
                     newComponent = new FunctionGenerator(parent, origin);
                     break;
-                // --- NEW PROBE ADDED HERE ---
                 case "DiffProbe":
                     newComponent = new DiffProbe(parent, origin);
                     break;

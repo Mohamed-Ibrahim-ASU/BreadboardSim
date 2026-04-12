@@ -733,7 +733,7 @@ private void UpdateHoverBox(Point mousePos)
                                         else
                                         {
                                             // 2N7000 Physical: 1=Source, 2=Gate, 3=Drain
-                                            // Netlist expects: 1=Source, 2=Gate, 3=Drain (Matches perfectly)
+                                            // Netlist expects: 1=Source, 2=Gate, 3=Drain
                                             simPinTarget = pinNumber; 
                                         }
                                     }
@@ -894,7 +894,7 @@ private void UpdateHoverBox(Point mousePos)
                                                 else
                                                 {
                                                     // 2N7000 Physical: 1=Source, 2=Gate, 3=Drain
-                                                    // Netlist expects: 1=Source, 2=Gate, 3=Drain (Matches perfectly)
+                                                    // Netlist expects: 1=Source, 2=Gate, 3=Drain 
                                                     simPinTarget = pNum; 
                                                 }
                                             }

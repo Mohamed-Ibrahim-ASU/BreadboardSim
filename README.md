@@ -2,7 +2,7 @@
 
 This is my take on a fork of Breadboard Simulator, I noticed the program was missing a few features I wanted to use in my Electronics Course, so I created this fork to add them.
 
-## [Download Here](https://mohamed-ibrahim-asu.github.io/bbsim/BreadboardSim_(MI).zip)
+## [Download Here](https://github.com/Mohamed-Ibrahim-ASU/BreadboardSim/releases/latest/download/BreadboardSim-MI.zip)
 
 # Additions
 ## Components
@@ -89,16 +89,15 @@ This is my take on a fork of Breadboard Simulator, I noticed the program was mis
 ![Simple LPF and Simple Diode Limiter circuit Breadboard showing the XY/IV Characteristics](https://mohamed-ibrahim-asu.github.io/bbsim/BreadBoardSim3.png)
 
 # Known Bugs:
+
+## ※ Moving LeadedComponents results in a messed up circuit.
+### ※ Should be fixed now, please update to the latest version.
 ## ※ Removing Probes does not automatically delete them from the graph. 
 ### Workaround: Switch the graph mode and then switch back to Per-Probe
 ## ※ Some Op-Amp Pin Names are kinda messed up
-### Workaround: Bottom Name is correct 
-※ Should be fixed
+### ※ Should be fixed now, please update to the latest version.
 ## ※ Astable Multivibrators using Op-Amps don't work
-### Workaround: I honestly have no idea 
-※ Should be fixed now
-(Simplified Explanation: Added Initial Voltage Property to capacitors, replaced tanh with arctan in OPAMP DC and Transient Functions)
-(Actually, reverted the tanh, but with a minimum epsilon to avoid divide by zero, should be more stable and more accurate.
+### ※ Should be fixed now, please update to the latest version.
 ## ※ XY Graph is really laggy on zooming in.
 ### Workaround: Make sure to only zoom in around the 0V point (ie: down to 1nV), but dont zoom in much at 5.012V - it's not that accurate anyways. Just enjoy the shape
 ## ※ XY Graph takes too long to "warm up"
