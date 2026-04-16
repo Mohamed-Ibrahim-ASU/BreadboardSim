@@ -10,6 +10,8 @@ This is my take on a fork of Breadboard Simulator, I noticed the program was mis
  ※  The function generator can be used to generate sinusoidal, square, or triangle waves of any frequency and amplitude with a DC offset.
  
  ※ Included in the function generator is a "Power-On Transient" Property that allows the circuit to start from 0 and ramp up to the steady state voltage across 5 periods.
+ 
+ ※ The function generator size is perfect to fit in the **middle** of the breadboard. ***PLEASE*** don't short the function generator.
   
 ※ When using the function generator, make sure the function generator is grounded and the simulation speed is low enough to allow for proper generation of the functions. 
 
