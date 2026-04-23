@@ -34,5 +34,7 @@ private:
 	double VosatN = 0; //Negative output saturation voltage
 	double LastVinp = 0;
 
+	double SlewRate = 1e9;
+	double GBW = 1e12;
 	double Iq = 0.01;
 };

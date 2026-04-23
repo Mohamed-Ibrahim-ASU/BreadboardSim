@@ -155,7 +155,9 @@ int TransientSolver::Tick(double tol, int maxIter, bool * convergenceFailureFlag
 			}
 		}
 		if (worstTol < tol) break;
+		
 		Math::newtonIteration(n, &(VariableValues[currentTick][0]), matrix);
+		
 		if (((clock() - startTime) / ((double)CLOCKS_PER_SEC)) > maxTickTime) {
 			std::cerr << "Tick timeout t=" << GetTimeAtTick(GetCurrentTick()) << " e=" << worstTol << std::endl;
 		
@@ -167,6 +169,11 @@ int TransientSolver::Tick(double tol, int maxIter, bool * convergenceFailureFlag
 	delete[] matrix;
 	if (i == maxIter) {
 		std::cerr << "Interactive convergence failure t=" << GetTimeAtTick(GetCurrentTick()) << " e=" << worstTol << " var=" << worstVar << std::endl;
+		VariableIdentifier vid = VariableData[worstVar];
+		if (vid.type == VariableIdentifier::VariableType::NET)
+			std::cerr << "  -> NET: " << vid.net->NetName << std::endl;
+		else
+			std::cerr << "  -> COMPONENT: " << vid.component->ComponentID << " pin " << vid.pin << std::endl;
 		convergenceFailure = true;
 	}
 	if (convergenceFailure) {
@@ -183,98 +190,126 @@ int TransientSolver::Tick(double tol, int maxIter, bool * convergenceFailureFlag
 
 void TransientSolver::RunInteractive(double simSpeed, double tol, int maxIter) {
 
-	double currentTime = 0;
-	//In order to see timestep recommendations and initialise stateful components, run a timestep at 0s - but discard it, as the steady state represents the initial conditions
-	bool firstRun = true;
-	bool running = true;
-	int ticktimestoAvg = 1200;
-	std::deque<double> ticktimes;
-	std::clock_t lastUpdateTime = 0;
-	while (running) {
-		currentTick++;
-		nextTimestep = simSpeed / 10;
-		if (!firstRun) {
-			nextTimestep = simSpeed * averageTickTime;
-		}
-		VariableValues.push_back(VariableValues[currentTick - 1]);
-		times.push_back(currentTime);
+    double currentTime = 0;
+    bool firstRun = true;
+    bool running = true;
+    int ticktimestoAvg = 1200;
+    std::deque<double> ticktimes;
+    std::clock_t lastUpdateTime = 0;
 
-		if (VariableValues.size() > bufferSize) {
-			VariableValues.pop_front();
-			times.pop_front();
-			currentTick--;
-		}
+    while (running) {
+       currentTick++;
+       nextTimestep = simSpeed / 10;
+       
+       if (!firstRun) {
+          nextTimestep = simSpeed * averageTickTime;
+       }
 
-		LARGE_INTEGER startT, endT, elapseduS;
-		LARGE_INTEGER freq;
+       VariableValues.push_back(VariableValues[currentTick - 1]);
+       times.push_back(0); // Placeholder, set dynamically below
 
-		QueryPerformanceFrequency(&freq);
-		QueryPerformanceCounter(&startT);
+       if (VariableValues.size() > bufferSize) {
+          VariableValues.pop_front();
+          times.pop_front();
+          currentTick--;
+       }
 
-		bool convergenceFailure = false;
-		if (firstRun) {
-			try {
-				Tick(tol, maxIter);
-			}
-			catch (std::runtime_error *e) {
+       LARGE_INTEGER startT, endT, elapseduS, freq;
+       QueryPerformanceFrequency(&freq);
+       QueryPerformanceCounter(&startT);
 
-			}
-		}
-		else {
-			try {
-				Tick(tol, maxIter, &convergenceFailure);
-			}
-			catch (std::runtime_error *e) {
-				std::cerr << "RUNTIME ERROR AT T=" << currentTime << " : " << e->what() << std::endl;
-				SolverCircuit->ReportError("EXCEPTION", true);
-				running = false;
-			}
-		}
-		
+       bool convergenceFailure = false;
+       int retries = 0;
 
-		if (!firstRun) {
-			if (((clock() - lastUpdateTime) / ((double)CLOCKS_PER_SEC)) > 2e-3) {
-				if (InteractiveCallback != nullptr) {
-					(*InteractiveCallback)(this);
-				}
-				lastUpdateTime = clock(); 
-			}
-		}
+       //  ADAPTIVE TIMESTEP RETRY LOOP
+       while (retries < 15) {
+           convergenceFailure = false;
+           // Safely calculate the absolute current time based on the last successful frame
+           currentTime = times[currentTick - 1] + nextTimestep;
+           times[currentTick] = currentTime;
 
-		QueryPerformanceCounter(&endT);
-		while (((endT.QuadPart - startT.QuadPart) / ((double)freq.QuadPart)) < 1e-4) QueryPerformanceCounter(&endT);
-		//std::cerr << ((endT.QuadPart - startT.QuadPart) / ((double)freq.QuadPart)) << std::endl;
-		elapseduS.QuadPart = endT.QuadPart - startT.QuadPart;
-		elapseduS.QuadPart *= 1000000;
-		elapseduS.QuadPart /= freq.QuadPart;
+           // Reset the Newton-Raphson guess to the last known good state.
+           // Without this, a failed tick leaves corrupted garbage in the matrix.
+           VariableValues[currentTick] = VariableValues[currentTick - 1];
 
-		//Recalculate tick time 
-		double timeForTick = elapseduS.QuadPart / 1000000.0;
-		ticktimes.push_back(timeForTick);
-		if (ticktimes.size() > ticktimestoAvg) {
-			ticktimes.pop_front();
-		}
-		double ttsum = 0;
-		for (auto iter = ticktimes.begin(); iter != ticktimes.end(); iter++)
-			ttsum += *iter;
-		averageTickTime = ttsum / ticktimes.size();
+           if (firstRun) {
+              std::cerr << "simSpeed=" << simSpeed << " firstTimestep=" << nextTimestep << std::endl;
+              std::cerr << "firstRun tick: currentTick=" << currentTick 
+                      << " t[currentTick]=" << times[currentTick] 
+                      << " t[currentTick-1]=" << times[currentTick-1] 
+                      << " DT=" << (times[currentTick] - times[currentTick-1]) << std::endl;
+              try { Tick(tol, maxIter); } catch (...) {}
+              break; // Do not adaptive-step the first run initialization
+           } 
+           else {
+              try {
+                 Tick(tol, maxIter, &convergenceFailure);
+              }
+              catch (std::runtime_error *e) {
+                 std::cerr << "RUNTIME ERROR AT T=" << currentTime << " : " << e->what() << std::endl;
+                 SolverCircuit->ReportError("EXCEPTION", true);
+                 running = false;
+                 break;
+              }
+           }
 
-		totalNumberOfTicks++;
-		if ((totalNumberOfTicks % 30) == 0) {
-			std::cerr << averageTickTime << std::endl;
-		}
-		currentTime += nextTimestep;
-		if (convergenceFailure)
-			SolverCircuit->ReportError("CONVERGENCE", false);
+           if (!convergenceFailure) {
+               break; 
+           }
 
-		if (firstRun) {
-			VariableValues.erase(VariableValues.end() - 1);
-			times.erase(times.end() - 1);
-			currentTick--;
-			firstRun = false;
-		}
-	}
+           // The matrix failed to converge (e.g., hit 200 iterations).
+           // Cut the physical timestep in half and try again from the safe state.
+           nextTimestep /= 2.0;
+           retries++;
+           std::cerr << "Matrix gridlock at t=" << currentTime << ". Cutting timestep to " << nextTimestep << " (Retry " << retries << ")" << std::endl;
+       }
 
+       if (convergenceFailure && running) {
+           std::cerr << "FATAL: Timestep too small to resolve. Halting cleanly." << std::endl;
+           SolverCircuit->ReportError("CONVERGENCE", false); 
+       		nextTimestep = simSpeed * averageTickTime;
+       }
+       //  END ADAPTIVE TIMESTEP 
+
+       if (!firstRun) {
+          if (((clock() - lastUpdateTime) / ((double)CLOCKS_PER_SEC)) > 2e-3) {
+             if (InteractiveCallback != nullptr) {
+                (*InteractiveCallback)(this);
+             }
+             lastUpdateTime = clock(); 
+          }
+       }
+
+       QueryPerformanceCounter(&endT);
+       while (((endT.QuadPart - startT.QuadPart) / ((double)freq.QuadPart)) < 1e-4) QueryPerformanceCounter(&endT);
+       
+       elapseduS.QuadPart = endT.QuadPart - startT.QuadPart;
+       elapseduS.QuadPart *= 1000000;
+       elapseduS.QuadPart /= freq.QuadPart;
+
+       double timeForTick = elapseduS.QuadPart / 1000000.0;
+       ticktimes.push_back(timeForTick);
+       if (ticktimes.size() > ticktimestoAvg) {
+          ticktimes.pop_front();
+       }
+       
+       double ttsum = 0;
+       for (auto iter = ticktimes.begin(); iter != ticktimes.end(); iter++)
+          ttsum += *iter;
+       averageTickTime = ttsum / ticktimes.size();
+
+       totalNumberOfTicks++;
+       if ((totalNumberOfTicks % 30) == 0) {
+           //std::cerr << averageTickTime << std::endl;
+       }
+       
+       if (firstRun) {
+          VariableValues.erase(VariableValues.end() - 1);
+          times.erase(times.end() - 1);
+          currentTick--;
+          firstRun = false;
+       }
+    }
 };
 
 bool TransientSolver::RampUp(std::map<Net *, double> originalVoltages, double tol, int maxIter) {
@@ -284,6 +319,7 @@ bool TransientSolver::RampUp(std::map<Net *, double> originalVoltages, double to
 	for(int i = 0; i < 10; i++) {
 		currentTick++;
 		nextTimestep = 1e-3;
+		currentTime += nextTimestep;
 		VariableValues.push_back(VariableValues[currentTick - 1]);
 		times.push_back(currentTime);
 
@@ -305,7 +341,6 @@ bool TransientSolver::RampUp(std::map<Net *, double> originalVoltages, double to
 				
 		}
 
-		currentTime += nextTimestep;
 
 		//Ramp up fixed voltage nets
 		for (const auto& net : originalVoltages) {

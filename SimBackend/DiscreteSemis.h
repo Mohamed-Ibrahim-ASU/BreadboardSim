@@ -26,6 +26,11 @@ private:
 	double SaturationCurrent = 1e-14; //Saturation current
 	double IdealityFactor = 1; //Ideality factor (1 for an ideal diode) 
 	double SeriesResistance = 0; //Series resistance
+	
+	// --- Zener Breakdown Parameters ---
+	double BreakdownVoltage = 0; // Bv (0 means standard diode, no breakdown)
+	double BreakdownCurrent = 1e-3; // Ibv
+	double BreakdownIdeality = 1; // Nbv
 };
 
 /*
@@ -63,6 +68,13 @@ private:
 
 	bool IsPNP = false;
 	double GetVt();
+
+	// --- SPICE PN Junction Limiting State ---
+	double last_raw_Vbe = -1000;
+	double clamped_Vbe = 0;
+	double last_raw_Vbc = -1000;
+	double clamped_Vbc = 0;
+	void get_limited_voltages(double raw_vbe, double raw_vbc, double& vbe_out, double& vbc_out);
 
 };
 

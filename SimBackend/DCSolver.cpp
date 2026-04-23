@@ -20,6 +20,26 @@ DCSolver::DCSolver(Circuit *circuit) {
 	for (auto c = circuit->Components.begin(); c != circuit->Components.end(); ++c) {
 		AddComponent(*c);
 	}
+	// Seed BJT base nets to half the supply voltage.
+	// Starting from 0.1V leaves both transistors fully off in feedback topologies
+	// (e.g. Class-AB), making the Jacobian near-singular from the first iteration.
+	double maxSupply = 0;
+	for (auto n = circuit->Nets.begin(); n != circuit->Nets.end(); ++n) {
+		if ((*n)->IsFixedVoltage && (*n)->NetVoltage > maxSupply)
+			maxSupply = (*n)->NetVoltage;
+	}
+	if (maxSupply > 0) {
+		double seed = maxSupply / 2.0;
+		for (auto n = circuit->Nets.begin(); n != circuit->Nets.end(); ++n) {
+			if ((*n)->IsFixedVoltage) continue;
+			for (auto conn = (*n)->connections.begin(); conn != (*n)->connections.end(); ++conn) {
+				if (conn->component->GetComponentType() == "BJT" && conn->pin == 1) {
+					VariableValues[NetVariables[*n]] = seed;
+					break;
+				}
+			}
+		}
+	}
 }
 
 void DCSolver::AddComponent(Component *c) {

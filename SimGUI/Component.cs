@@ -668,6 +668,9 @@ namespace SimGUI
                 case "Diode":
                     newComponent = new Diode(parent, origin, data.ComponentModel);
                     break;
+                case "Zener Diode":
+                    newComponent = new ZenerDiode(parent, origin, data.ComponentModel);
+                    break;
                 case "Transistor":
                 case "NPN Transistor":
                 case "PNP Transistor":

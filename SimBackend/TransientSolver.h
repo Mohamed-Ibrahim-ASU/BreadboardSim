@@ -32,16 +32,16 @@ public:
 	void AddNet(Net *net);
 
 	//Run a single Newton-Raphson solve 'tick'
-	int Tick(double tol = 1e-6, int maxIter = 50, bool *convergenceFailureFlag = nullptr);
+	int Tick(double tol = 1e-6, int maxIter = 200, bool *convergenceFailureFlag = nullptr);
 
 	//Run the solver in interactive mode
-	void RunInteractive(double simSpeed, double tol = 1e-6, int maxIter = 100);
+	void RunInteractive(double simSpeed, double tol = 1e-6, int maxIter = 200);
 
 	/*
 	Performs a DC 'ramp-up' simulation. Initial operating point must have all fixed voltage nets at 0V
 	Returns whether or not successful
 	*/
-	bool RampUp(std::map<Net *, double> originalVoltages, double tol = 1e-12, int maxIter = 400);
+	bool RampUp(std::map<Net *, double> originalVoltages, double tol = 1e-12, int maxIter = 500);
 
 	//Get value of a net voltage at current point in solve routine, given the tick number (-1 for current time)
 	double GetNetVoltage(Net *net, int n = -1);

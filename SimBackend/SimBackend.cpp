@@ -85,7 +85,7 @@ int main(int argc, char* argv[])
 		netlist.append(line);
 		netlist.append("\n");
 	}
-
+	std::cerr << netlist << std::endl;
 	circuit.ReadNetlist(netlist);
 	std::cout << "VARS t,";
 
@@ -103,6 +103,8 @@ int main(int argc, char* argv[])
 	bool result = false;
 	try {
 		result = solver.Solve();
+		for (int i = 0; i < circuit.Nets.size(); i++)
+			std::cerr << circuit.Nets[i]->NetName << "=" << solver.GetNetVoltage(circuit.Nets[i]) << std::endl;
 	}
 	catch (void *e){
 		std::cerr << "Failed to obtain initial operating point" << std::endl;
@@ -116,6 +118,7 @@ int main(int argc, char* argv[])
 	TransientSolver tranSolver(solver);
 	tranSolver.InteractiveCallback = interactiveTick;
 	std::thread updaterThread(iothread);
+	std::cerr << "simSpeed=" << simSpeed << std::endl;
 	tranSolver.RunInteractive(simSpeed);
 	return 0;
 }

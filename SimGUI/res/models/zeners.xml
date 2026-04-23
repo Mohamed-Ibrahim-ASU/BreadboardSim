@@ -1,0 +1,9 @@
+<models>
+    <model name="Generic Zener" bv="5.1" ibv="5e-3" rser="15" nbv="1.5"><data>DIODE {r} {1} {2} is=1e-11 n=1.5 rser={rser} bv={bv} ibv={ibv} nbv={nbv}</data></model>
+    <model name="1N4728A (3.3V)" bv="3.3" ibv="76e-3" rser="10" nbv="1"><data>DIODE {r} {1} {2} is=1e-11 n=1.5 rser={rser} bv={bv} ibv={ibv} nbv={nbv}</data></model>
+    <model name="1N4732A (4.7V)" bv="4.7" ibv="53e-3" rser="8" nbv="1"><data>DIODE {r} {1} {2} is=1e-11 n=1.5 rser={rser} bv={bv} ibv={ibv} nbv={nbv}</data></model>
+    <model name="1N4742A (12V)" bv="12" ibv="21e-3" rser="9" nbv="1"><data>DIODE {r} {1} {2} is=1e-11 n=1.5 rser={rser} bv={bv} ibv={ibv} nbv={nbv}</data></model>
+    <model name="1N4744A (15V)" bv="15" ibv="17e-3" rser="14" nbv="1"><data>DIODE {r} {1} {2} is=1e-11 n=1.5 rser={rser} bv={bv} ibv={ibv} nbv={nbv}</data></model>
+    <model name="BZX79-C5V1 (5.1V)" bv="5.1" ibv="5e-3" rser="40" nbv="1"><data>DIODE {r} {1} {2} is=1e-11 n=1.5 rser={rser} bv={bv} ibv={ibv} nbv={nbv}</data></model>
+    <model name="BZX79-C10 (10V)" bv="10" ibv="5e-3" rser="15" nbv="1"><data>DIODE {r} {1} {2} is=1e-11 n=1.5 rser={rser} bv={bv} ibv={ibv} nbv={nbv}</data></model>
+</models>

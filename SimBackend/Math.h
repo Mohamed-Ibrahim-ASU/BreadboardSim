@@ -57,9 +57,12 @@ namespace Math {
 	const double degreesToRadians = pi / 180;
 
 	/*Safer exp function for use in a Newtonian solver - models as linear above a certain point*/
-	double exp_safe(double x, double limit = 45);
+	double exp_safe(double x, double limit = 28);
 
 	/*Derivative of above function*/
-	double exp_deriv(double x, double limit = 45);
+	double exp_deriv(double x, double limit = 28);
+	
+	// SPICE PN Junction Limiting Algorithm
+	double pnjlim(double vnew, double vold, double vt, double vcrit);
 
 }

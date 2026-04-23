@@ -1,6 +1,7 @@
 #include "Math.h"
 #include <stdexcept>
 #include <set>
+#include <vector> 
 
 namespace Math {
 	void newtonIteration(int n, double *x, double **m) {
@@ -8,7 +9,7 @@ namespace Math {
 
 		gaussianElimination(n, m);
 		double *delta = new double[n];
-		//Back substitution: see report section 2.4.1.5
+		// Back substitution: see report section 2.4.1.5
 		for (int i = n - 1; i >= 0; i--) {
 			double sum = m[i][n];
 			for (int j = i + 1; j < n; j++) {
@@ -17,11 +18,29 @@ namespace Math {
 			delta[i] = sum / m[i][i];
 		}
 
+		// The size check ensures it safely resets if you load a new circuit with more/less nodes.
+		static std::vector<double> lastDelta;
+		if (lastDelta.size() != n) {
+			lastDelta.assign(n, 0.0);
+		}
+
 		for (int i = 0; i < n; i++) {
-			x[i] += delta[i];
+			double step = delta[i];
+			double limit = 0.3; 
+          
+			if (step * lastDelta[i] < 0.0) {
+				limit = 0.02; 
+			}
+
+			if (step > limit) step = limit;
+			if (step < -limit) step = -limit;
+          
+			x[i] += step;
+          
+			// Save this step for the next iteration's bounce check
+			lastDelta[i] = step; 
 		}
 		delete[] delta;
-
 	}
 	
 	//See report section 2.4.1.4
@@ -68,14 +87,41 @@ namespace Math {
 	}
 
 	double exp_deriv(double x, double limit) {
+		double val;
+        
 		if (x > limit) {
-			return exp(limit);
+			val = exp(limit);
 		}
 		else if (x < -limit) {
-			return exp(-limit);
+			val = exp(-limit);
 		}
 		else {
-			return exp(x);
+			val = exp(x);
 		}
+
+		
+		// 1e-12 clamp removed to allow proper reverse bias convergence
+		return val;
+	}
+
+	double pnjlim(double vnew, double vold, double vt, double vcrit) {
+		// If the new voltage is safely below the critical threshold, or the step is tiny, allow it
+		if ((vnew <= vcrit) || (std::abs(vnew - vold) < (vt + vt))) {
+			return vnew;
+		}
+
+		// If the voltage is crossing into the explosive exponential region, clamp it logarithmically
+		if (vold > 0.0) {
+			double arg = 1.0 + (vnew - vold) / vt;
+			if (arg > 0.0) {
+				vnew = vold + vt * log(arg);
+			} else {
+				vnew = vcrit;
+			}
+		} else {
+			vnew = vt * log(vnew / vt);
+		}
+        
+		return vnew;
 	}
 }

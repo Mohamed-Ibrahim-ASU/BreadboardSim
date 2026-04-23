@@ -141,6 +141,7 @@
                 <TreeViewItem x:Name="Devices_Input" Header="Input Devices"/>
                 <Separator/>
                 <TreeViewItem x:Name="Devices_Diodes" Header="Diodes"/>
+                <TreeViewItem x:Name="Devices_ZenerDiodes" Header="Zener Diodes"/>
                 <TreeViewItem x:Name="Devices_NPN" Header="NPN Transistors"/>
                 <TreeViewItem x:Name="Devices_PNP" Header="PNP Transistors"/>
                 <TreeViewItem x:Name="Devices_NMOS" Header="N-channel MOSFETs"/>

@@ -69,6 +69,7 @@ namespace SimGUI
                                                "res/actions/zoomout.png",
                                                "res/models/7seg.xml",
                                                "res/models/diodes.xml",
+                                               "res/models/zeners.xml",
                                                "res/models/ics.xml",
                                                "res/models/leds.xml",
                                                "res/models/transistors.xml",
@@ -157,6 +158,7 @@ namespace SimGUI
             PopulateMenuWithModels(Devices_DigitalIC, "Integrated Circuit", "res/models/ics.xml", "Digital");
             PopulateMenuWithModels(Devices_AnalogIC, "Integrated Circuit", "res/models/ics.xml", "Analog");
             PopulateMenuWithModels(Devices_Diodes, "Diode", "res/models/diodes.xml");
+            PopulateMenuWithModels(Devices_ZenerDiodes, "Zener Diode", "res/models/zeners.xml");
             PopulateMenuWithModels(Devices_NPN, "NPN Transistor", "res/models/transistors.xml","npn");
             PopulateMenuWithModels(Devices_PNP, "PNP Transistor", "res/models/transistors.xml", "pnp");
             PopulateMenuWithModels(Devices_NMOS, "N-channel MOSFET", "res/models/transistors.xml", "nmos");
@@ -268,6 +270,12 @@ namespace SimGUI
                     if (pinNumber == 2) return "Collector"; 
                     if (pinNumber == 3) return "Base";      
                 } 
+                else if (model.ToLower().Contains("bc337") || 
+                         model.ToLower().Contains("bc327")) { 
+                    if (pinNumber == 1) return "Collector";
+                    if (pinNumber == 2) return "Base";
+                    if (pinNumber == 3) return "Emitter";
+                }
                 else {
                     if (pinNumber == 1) return "Emitter";
                     if (pinNumber == 2) return "Base";

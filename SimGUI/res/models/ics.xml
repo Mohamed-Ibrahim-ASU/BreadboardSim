@@ -35,7 +35,7 @@ RES {r}.R2 {2} {r}.inN res=1</data>
 <label pin="8" name="No Connect"/>
 </model>
 <model name="LM741 Op-amp" category="Analog" footprint="DIP8-SMALLFONT">
-<data>OPAMP {r} {r}.inP {r}.inN {6} {4} {7} rin=1e6  vosatn=1.5 vosatp=1 rout=20
+<data>OPAMP {r} {r}.inP {r}.inN {6} {4} {7} rin=1e6  vosatn=1.5 vosatp=1.5 rout=20 slew=0.5e6 gbw=1e6
 RES {r}.R1 {3} {r}.inP res=1
 RES {r}.R2 {2} {r}.inN res=1</data>
 <label pin="1" name="No Connect"/>
@@ -49,10 +49,10 @@ RES {r}.R2 {2} {r}.inN res=1</data>
 </model>
 
 <model name="LM358 Op-amp" category="Analog" footprint="DIP8-SMALLFONT">
-<data>OPAMP {r}a {r}.ainP {r}.ainN {1} {4} {8} rin=2e6 vosatp=1.5 vosatn=0 rout=20
+<data>OPAMP {r}a {r}.ainP {r}.ainN {1} {4} {8} rin=2e6 vosatp=1.2 vosatn=0.6 rout=20 slew=0.5e6 gbw=1e6
 RES {r}.R1a {3} {r}.ainP res=1
 RES {r}.R2a {2} {r}.ainN res=1
-OPAMP {r}b {r}.binP {r}.binN {7} {4} {8} rin=2e6 vosatp=1.5 vosatn=0 rout=20
+OPAMP {r}b {r}.binP {r}.binN {7} {4} {8} rin=2e6 vosatp=1.2 vosatn=0.6 rout=20 slew=0.5e6 gbw=1e6
 RES {r}.R1b {5} {r}.binP res=1
 RES {r}.R2b {6} {r}.binN res=1</data>
 <label pin="1" name="Output A"/>
@@ -66,16 +66,16 @@ RES {r}.R2b {6} {r}.binN res=1</data>
 </model>
 
 <model name="TL074 Op-amp" category="Analog" footprint="DIP14">
-<data>OPAMP {r}a {r}.ainP {r}.ainN {1} {11} {4} rin=1e12 vosatp=1 vosatn=1 rout=20 
+<data>OPAMP {r}a {r}.ainP {r}.ainN {1} {11} {4} rin=1e12 vosatp=1 vosatn=1 rout=20 slew=13e6 gbw=3e6
 RES {r}.R1a {3} {r}.ainP res=1
 RES {r}.R2a {2} {r}.ainN res=1
-OPAMP {r}b {r}.binP {r}.binN {7} {11} {4} rin=1e12 vosatp=1 vosatn=1 rout=20 
+OPAMP {r}b {r}.binP {r}.binN {7} {11} {4} rin=1e12 vosatp=1 vosatn=1 rout=20 slew=13e6 gbw=3e6
 RES {r}.R1b {5} {r}.binP res=1
 RES {r}.R2b {6} {r}.binN res=1
-OPAMP {r}c {r}.cinP {r}.cinN {8} {11} {4} rin=1e12 vosatp=1 vosatn=1 rout=20 
+OPAMP {r}c {r}.cinP {r}.cinN {8} {11} {4} rin=1e12 vosatp=1 vosatn=1 rout=20 slew=13e6 gbw=3e6
 RES {r}.R1c {10} {r}.cinP res=1
 RES {r}.R2c {9} {r}.cinN res=1
-OPAMP {r}d {r}.dinP {r}.dinN {14} {11} {4} rin=1e12 vosatp=1 vosatn=1 rout=20
+OPAMP {r}d {r}.dinP {r}.dinN {14} {11} {4} rin=1e12 vosatp=1 vosatn=1 rout=20 slew=13e6 gbw=3e6
 RES {r}.R1d {12} {r}.dinP res=1
 RES {r}.R2d {13} {r}.dinN res=1</data>
 <label pin="1" name="Output 1"/>
@@ -94,16 +94,16 @@ RES {r}.R2d {13} {r}.dinN res=1</data>
 <label pin="14" name="Output 4"/>
 </model>
 <model name="LM324 Op-amp" category="Analog" footprint="DIP14">
-<data>OPAMP {r}a {r}.ainP {r}.ainN {1} {11} {4} rin=2e6 vosatp=1 vosatn=0 rout=20 
+<data>OPAMP {r}a {r}.ainP {r}.ainN {1} {11} {4} rin=2e6 vosatp=1.2 vosatn=0.6 rout=20 slew=0.5e6 gbw=1e6
 RES {r}.R1a {3} {r}.ainP res=1
 RES {r}.R2a {2} {r}.ainN res=1
-OPAMP {r}b {r}.binP {r}.binN {7} {11} {4} rin=2e6 vosatp=1 vosatn=0 rout=20 
+OPAMP {r}b {r}.binP {r}.binN {7} {11} {4} rin=2e6 vosatp=1.2 vosatn=0.6 rout=20 slew=0.5e6 gbw=1e6
 RES {r}.R1b {5} {r}.binP res=1
 RES {r}.R2b {6} {r}.binN res=1
-OPAMP {r}c {r}.cinP {r}.cinN {8} {11} {4} rin=2e6 vosatp=1 vosatn=0 rout=20 
+OPAMP {r}c {r}.cinP {r}.cinN {8} {11} {4} rin=2e6 vosatp=1.2 vosatn=0.6 rout=20 slew=0.5e6 gbw=1e6
 RES {r}.R1c {10} {r}.cinP res=1
 RES {r}.R2c {9} {r}.cinN res=1
-OPAMP {r}d {r}.dinP {r}.dinN {14} {11} {4} rin=2e6 vosatp=1 vosatn=0 rout=20 
+OPAMP {r}d {r}.dinP {r}.dinN {14} {11} {4} rin=2e6 vosatp=1.2 vosatn=0.6 rout=20 slew=0.5e6 gbw=1e6
 RES {r}.R1d {12} {r}.dinP res=1
 RES {r}.R2d {13} {r}.dinN res=1</data>
 <label pin="1" name="Output 1"/>
