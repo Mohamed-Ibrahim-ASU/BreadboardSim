@@ -23,11 +23,16 @@ This is my take on a fork of Breadboard Simulator, I noticed the program was mis
 
 ※ Added 1N4007 Diode
 
+※ Added customisable Zener Diodes
+
 ※ Added BC639 NPN Transistor
+※ Added BC337 NPN Transistor
+※ Added BC327 PNP Transistor
+
 
 ※ Added LM358 OP-AMP
     
-
+	
 ## Probes
 ### Voltage Difference Probes
   ※ The voltage difference probes consist of a positive and a negative probe to measure the voltage drop between any two nodes on the breadboard and plots it on the graph; the usage is almost identical to the oscilloscope probe currently implemented. 
@@ -57,6 +62,9 @@ This is my take on a fork of Breadboard Simulator, I noticed the program was mis
  ※  Capacitors now have an Initial Voltage Property to allow for the functioning of circuits like astable multivibrators.
  ※  Setting the initial voltage to 0 will let the simulator skip the "transient" stage and apply the proper DC voltage on the capacitor automatically. 
  ※  If you want to start the simulation with 0V, set the capacitor voltage to 1pV. 
+### Updated Op-Amps
+ ※ Slew rate implementation for OP-Amps, as well as GBW (Gain-Bandwidth). 
+ ※ Added the respective slew rates and GBWs to the already existing models. 
 
 ### Hover Tooltips
  ※  Hover over any component on the breadboard during simulation to see the current/voltage as well as a summarized tooltip for ICs and other multi-pin components.
@@ -110,6 +118,7 @@ This is my take on a fork of Breadboard Simulator, I noticed the program was mis
 # Future Updates if I ever get around to them
 ### ※ Curve Tracer Graph
 ### ※ Proper Transient Graphing
+### ※ pnjlim
 ### ※ Better documentation and instructions
 _____________________________
 
