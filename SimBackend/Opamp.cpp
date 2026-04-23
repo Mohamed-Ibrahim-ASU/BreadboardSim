@@ -88,7 +88,11 @@ double Opamp::TransientFunction(TransientSolver *solver, int f) {
        double y = Vprev_rel / Vclip;
        if (y > 0.95) y = 0.95;
        if (y < -0.95) y = -0.95;
-       Vint_rel = (y / std::sqrt(1.0 - y * y)) * Vclip;
+       
+       double y2 = y * y;
+       double y4 = y2 * y2;
+       double denom = 1.0 - y4 * y4;
+       Vint_rel = (y / std::sqrt(std::sqrt(std::sqrt(denom)))) * Vclip;
     } else {
         double dt = solver->GetTimeAtTick(tick) - solver->GetTimeAtTick(tick - 1);
         if (dt < 1e-15) dt = 1e-15;
@@ -104,17 +108,26 @@ double Opamp::TransientFunction(TransientSolver *solver, int f) {
         if (y > 0.95) y = 0.95;
         if (y < -0.95) y = -0.95;
         
-        double Vprev_int_rel = (y / std::sqrt(1.0 - y * y)) * Vclip;
+       double y2 = y * y;
+       double y4 = y2 * y2;
+       double denom = 1.0 - y4 * y4;
+       double Vprev_int_rel = (y / std::sqrt(std::sqrt(std::sqrt(denom)))) * Vclip;
         
         // 2. INTEGRATE: Safely add the Slew step to the un-clipped state
         Vint_rel = (Vprev_int_rel + dt * calcSlew * curve_in) / (1.0 + dt / tau_leak);
     }
 
-    double arg_clip = Vint_rel / Vclip;
-    double arg_clip_sq = arg_clip * arg_clip;
-    double curve_clip = arg_clip / std::sqrt(1.0 + arg_clip_sq);
+   double arg_clip = Vint_rel / Vclip;
+   double arg_clip_sq = arg_clip * arg_clip;
+   double arg_clip_4 = arg_clip_sq * arg_clip_sq;
+   double arg_clip_8 = arg_clip_4 * arg_clip_4;
     
-    double Vo = Vclip * curve_clip + Vmid + Iout * OutputResistance;
+   double Z = 1.0 + arg_clip_8;
+   double Z_8th = std::sqrt(std::sqrt(std::sqrt(Z)));
+    
+   double curve_clip = arg_clip / Z_8th;
+    
+   double Vo = Vclip * curve_clip + Vmid + Iout * OutputResistance;
 
     if (f == 0) return ((NinvInp - InvInp) / InputResistance) - Iinp;
     else if (f == 1) return (-(NinvInp - InvInp) / InputResistance) - Iinn;
@@ -205,7 +218,10 @@ double Opamp::TransientDerivative(TransientSolver *solver, int f, VariableIdenti
        double y = Vprev_rel / Vclip;
        if (y > 0.95) y = 0.95;
        if (y < -0.95) y = -0.95;
-       Vint_rel = (y / std::sqrt(1.0 - y * y)) * Vclip;
+       double y2 = y * y;
+       double y4 = y2 * y2;
+       double denom = 1.0 - y4 * y4;
+       Vint_rel = (y / std::sqrt(std::sqrt(std::sqrt(denom)))) * Vclip;
         dVint_rel_dVdiff = 0.0;
     } else {
         double dt = solver->GetTimeAtTick(tick) - solver->GetTimeAtTick(tick - 1);
@@ -219,18 +235,27 @@ double Opamp::TransientDerivative(TransientSolver *solver, int f, VariableIdenti
         if (y > 0.95) y = 0.95;
         if (y < -0.95) y = -0.95;
         
-        double Vprev_int_rel = (y / std::sqrt(1.0 - y * y)) * Vclip;
+       double y2 = y * y;
+       double y4 = y2 * y2;
+       double denom = 1.0 - y4 * y4;
+       double Vprev_int_rel = (y / std::sqrt(std::sqrt(std::sqrt(denom)))) * Vclip;
         
         Vint_rel = (Vprev_int_rel + dt * calcSlew * curve_in) / (1.0 + dt / tau_leak);
         dVint_rel_dVdiff = (dt * calcSlew * dCurveIn_dVdiff) / (1.0 + dt / tau_leak);
     }
 
-    double arg_clip = Vint_rel / Vclip;
-    double arg_clip_sq = arg_clip * arg_clip;
-    double curve_clip = arg_clip / std::sqrt(1.0 + arg_clip_sq);
-    double dCurveClip_dInt = (1.0 / Vclip) / ((1.0 + arg_clip_sq) * std::sqrt(1.0 + arg_clip_sq));
+   double arg_clip = Vint_rel / Vclip;
+   double arg_clip_sq = arg_clip * arg_clip;
+   double arg_clip_4 = arg_clip_sq * arg_clip_sq;
+   double arg_clip_8 = arg_clip_4 * arg_clip_4;
+    
+   double Z = 1.0 + arg_clip_8;
+   double Z_8th = std::sqrt(std::sqrt(std::sqrt(Z)));
+    
+   double curve_clip = arg_clip / Z_8th;
+   double dCurveClip_dInt = (1.0 / Vclip) / (Z * Z_8th);
 
-    double dVo_dVdiff = Vclip * dCurveClip_dInt * dVint_rel_dVdiff;
+   double dVo_dVdiff = Vclip * dCurveClip_dInt * dVint_rel_dVdiff;
 
     if (f == 0) {
        if (var.type == var.NET && var.net == PinConnections[0]) return 1.0 / InputResistance;
