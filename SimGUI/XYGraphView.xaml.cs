@@ -20,6 +20,14 @@ namespace SimGUI
         private const double RedrawIntervalMs = 120; 
         private const int    MinTicksToPlot   = 80;
         private const int    DrawWindowTicks  = 800;
+        private const int    MaxPersistentPoints = 30000;
+        private const int    MaxPersistentRenderPoints = 6000;
+        private const int    MaxPersistentSegments = 96;
+        private const int    MinPersistentSegmentPoints = 4;
+        private const float  PlotSegmentBreakDistancePx = 95f;
+        private const double PersistentJumpThreshold = 0.08;
+        private const double PersistentAxisJumpThreshold = 0.06;
+        private const double PersistentDirectionThreshold = 0.004;
 
         private static readonly Brush[] TraceColours =
         {
@@ -33,18 +41,63 @@ namespace SimGUI
         public enum AxisUnit { Volts, Amps }
 
         private AxisUnit _xUnit = AxisUnit.Volts;
+        public sealed class GraphSourceOption
+        {
+            public string Key { get; set; }
+            public string DisplayName { get; set; }
+            public AxisUnit Unit { get; set; }
+            public int VarId1 { get; set; }
+            public int VarId2 { get; set; }
+            public bool Invert { get; set; }
+            public Brush SourceBrush { get; set; }
+
+            public override string ToString()
+            {
+                return DisplayName + " (" + (Unit == AxisUnit.Amps ? "A" : "V") + ")";
+            }
+        }
+
+        private sealed class TraceOption
+        {
+            public int Index { get; set; }
+            public string DisplayName { get; set; }
+            public Brush SourceBrush { get; set; }
+
+            public override string ToString()
+            {
+                return DisplayName;
+            }
+        }
+
+        private struct PersistedPoint
+        {
+            public double X;
+            public double Y;
+        }
+
+        private sealed class PersistentSegment
+        {
+            public readonly List<PersistedPoint> Points = new List<PersistedPoint>();
+            public int Direction;
+        }
+
         private struct XYTrace
         {
             public string ProbeName;
             public int    InputVarId1;
             public int    InputVarId2;
             public int    OutputVarId;
-            public bool   InvertY;     
+            public int    OutputVarId2;
+            public bool   InvertX;
+            public bool   InvertY;
             public AxisUnit XUnit; 
             public AxisUnit YUnit; 
         }
 
         private readonly XYTrace[] _traces = new XYTrace[MaxTraces];
+        private readonly List<PersistentSegment>[] _persistentSegments = new List<PersistentSegment>[MaxTraces];
+        private readonly int[] _persistentPointCounts = new int[MaxTraces];
+        private readonly int[] _lastPersistedTickCount = new int[MaxTraces];
         private int _traceCount = 0;
         private int _epoch = 0;
         private int _pendingRenders = 0;
@@ -59,6 +112,12 @@ namespace SimGUI
 
         private bool     _hasAutoScaled = false;
         private DateTime _lastRedraw    = DateTime.MinValue;
+        private readonly List<GraphSourceOption> _sourceOptions = new List<GraphSourceOption>();
+        private bool _updatingSourceSelectors = false;
+        private bool _updatingTraceSelector = false;
+        private int _selectedTraceIndex = 0;
+        public const string DefaultUserTraceName = "Trace 1";
+        private const string UserTraceNamePrefix = "Trace ";
 
         // Panning State
         private bool _isPanning = false;
@@ -72,6 +131,8 @@ namespace SimGUI
             InitializeComponent();
             for (int i = 0; i < MaxTraces; i++)
             {
+                _persistentSegments[i] = new List<PersistentSegment>();
+                _lastPersistedTickCount[i] = -1;
                 _paths[i] = new Path
                 {
                     Stroke             = TraceColours[i],
@@ -94,7 +155,57 @@ namespace SimGUI
 
         public void StartSim(Simulator sim) { _sim = sim; }
 
-        public Brush AddXYTrace(string probeName, int inputVarId1, int inputVarId2, int outputVarId, Brush preferredColour = null, AxisUnit xUnit = AxisUnit.Volts, AxisUnit yUnit = AxisUnit.Volts, bool invertY = false)
+        public void SetGraphSourceOptions(IEnumerable<GraphSourceOption> sourceOptions)
+        {
+            _updatingSourceSelectors = true;
+            XAxisSourceCombo.Items.Clear();
+            YAxisSourceCombo.Items.Clear();
+            _sourceOptions.Clear();
+
+            if (sourceOptions != null)
+            {
+                foreach (GraphSourceOption sourceOption in sourceOptions)
+                {
+                    if (sourceOption == null || string.IsNullOrEmpty(sourceOption.DisplayName)) continue;
+                    _sourceOptions.Add(sourceOption);
+                    XAxisSourceCombo.Items.Add(sourceOption);
+                    YAxisSourceCombo.Items.Add(sourceOption);
+                }
+            }
+
+            SelectSourcesForTrace(_selectedTraceIndex);
+            _updatingSourceSelectors = false;
+        }
+
+        private void RefreshTraceSelector()
+        {
+            _updatingTraceSelector = true;
+            TraceSelectorCombo.Items.Clear();
+
+            for (int i = 0; i < _traceCount; i++)
+            {
+                TraceSelectorCombo.Items.Add(new TraceOption
+                {
+                    Index = i,
+                    DisplayName = _traces[i].ProbeName,
+                    SourceBrush = _paths[i].Stroke
+                });
+            }
+
+            if (_traceCount == 0)
+            {
+                _selectedTraceIndex = 0;
+            }
+            else
+            {
+                if (_selectedTraceIndex < 0 || _selectedTraceIndex >= _traceCount) _selectedTraceIndex = 0;
+                TraceSelectorCombo.SelectedIndex = _selectedTraceIndex;
+            }
+
+            _updatingTraceSelector = false;
+        }
+
+        public Brush AddXYTrace(string probeName, int inputVarId1, int inputVarId2, int outputVarId, Brush preferredColour = null, AxisUnit xUnit = AxisUnit.Volts, AxisUnit yUnit = AxisUnit.Volts, bool invertY = false, bool invertX = false, int outputVarId2 = -1)
         {
             if (_traceCount >= MaxTraces) return Brushes.Gray;
 
@@ -107,17 +218,114 @@ namespace SimGUI
                 InputVarId1 = inputVarId1,
                 InputVarId2 = inputVarId2,
                 OutputVarId = outputVarId,
+                OutputVarId2 = outputVarId2,
+                InvertX     = invertX,
                 InvertY     = invertY,
                 XUnit       = xUnit,
                 YUnit       = yUnit
             };
 
+            _xUnit = xUnit;
             if (yUnit == AxisUnit.Volts) _hasVoltsY = true;
             if (yUnit == AxisUnit.Amps) _hasAmpsY = true;
 
             _paths[_traceCount].Stroke = col;
             _traceCount++;
+            if (_traceCount == 1) _selectedTraceIndex = 0;
+            RefreshTraceSelector();
+            SelectSourcesForTrace(_selectedTraceIndex);
             return col;
+        }
+
+        private void AddTraceButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_traceCount >= MaxTraces) return;
+
+            GraphSourceOption xSource = XAxisSourceCombo.SelectedItem as GraphSourceOption;
+            GraphSourceOption ySource = YAxisSourceCombo.SelectedItem as GraphSourceOption;
+
+            if ((xSource == null || ySource == null) && _sourceOptions.Count >= 2)
+            {
+                xSource = _sourceOptions.FirstOrDefault(s => s.Unit == AxisUnit.Volts) ?? _sourceOptions[0];
+                ySource = _sourceOptions.FirstOrDefault(s => s.Unit == AxisUnit.Amps && s != xSource) ??
+                          _sourceOptions.FirstOrDefault(s => s != xSource);
+            }
+
+            if (xSource == null || ySource == null) return;
+
+            Brush traceBrush = ySource.SourceBrush != null && ySource.SourceBrush != Brushes.Transparent
+                ? ySource.SourceBrush
+                : null;
+
+            int newIndex = _traceCount;
+            AddXYTrace(GetNextUserTraceName(), xSource.VarId1, xSource.VarId2, ySource.VarId1,
+                traceBrush, xSource.Unit, ySource.Unit, ySource.Invert, xSource.Invert, ySource.VarId2);
+
+            _selectedTraceIndex = newIndex;
+            RefreshTraceSelector();
+            SelectSourcesForTrace(_selectedTraceIndex);
+            _hasAutoScaled = false;
+            _lastRedraw = DateTime.MinValue;
+            PlotAll();
+        }
+
+        private void RemoveTraceButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_traceCount == 0) return;
+            RemoveTraceAt(_selectedTraceIndex);
+        }
+
+        private string GetNextUserTraceName()
+        {
+            for (int i = 1; i <= MaxTraces; i++)
+            {
+                string name = UserTraceNamePrefix + i.ToString(CultureInfo.InvariantCulture);
+                if (!TraceNameExists(name)) return name;
+            }
+
+            return UserTraceNamePrefix + (_traceCount + 1).ToString(CultureInfo.InvariantCulture);
+        }
+
+        private bool TraceNameExists(string name)
+        {
+            for (int i = 0; i < _traceCount; i++)
+                if (_traces[i].ProbeName == name) return true;
+            return false;
+        }
+
+        private void RemoveTraceAt(int index)
+        {
+            if (index < 0 || index >= _traceCount) return;
+
+            for (int i = index; i < _traceCount - 1; i++)
+            {
+                _traces[i] = _traces[i + 1];
+                _paths[i].Stroke = _paths[i + 1].Stroke;
+                _paths[i].Data = _paths[i + 1].Data;
+
+                _persistentSegments[i].Clear();
+                _persistentSegments[i].AddRange(_persistentSegments[i + 1]);
+                _persistentPointCounts[i] = _persistentPointCounts[i + 1];
+                _lastPersistedTickCount[i] = _lastPersistedTickCount[i + 1];
+            }
+
+            _traceCount--;
+            _paths[_traceCount].Data = null;
+            _persistentSegments[_traceCount].Clear();
+            _persistentPointCounts[_traceCount] = 0;
+            _lastPersistedTickCount[_traceCount] = -1;
+
+            if (_selectedTraceIndex >= _traceCount) _selectedTraceIndex = _traceCount - 1;
+            if (_selectedTraceIndex < 0) _selectedTraceIndex = 0;
+
+            RecalculateYAxisUnits();
+            ClearPersistentData();
+            RefreshTraceSelector();
+            SelectSourcesForTrace(_selectedTraceIndex);
+            _hasAutoScaled = false;
+            UpdateGrid();
+            _lastRedraw = DateTime.MinValue;
+            PlotAll();
         }
         public void UpdateXYTrace(string probeName, int newInId1, int newInId2, int newOutId)
         {
@@ -127,8 +335,33 @@ namespace SimGUI
                 _traces[i].InputVarId1 = newInId1;
                 _traces[i].InputVarId2 = newInId2;
                 _traces[i].OutputVarId = newOutId;
+                _traces[i].OutputVarId2 = -1;
+                ClearPersistentData();
+                SelectSourcesForTrace(_selectedTraceIndex);
                 return;
             }
+        }
+
+        public bool UpdateXYTraceSource(string probeName, int newInId1, int newInId2, int newOutId, AxisUnit xUnit, AxisUnit yUnit, bool invertY, bool invertX, int newOutId2 = -1)
+        {
+            for (int i = 0; i < _traceCount; i++)
+            {
+                if (_traces[i].ProbeName != probeName) continue;
+                _traces[i].InputVarId1 = newInId1;
+                _traces[i].InputVarId2 = newInId2;
+                _traces[i].OutputVarId = newOutId;
+                _traces[i].OutputVarId2 = newOutId2;
+                _traces[i].InvertX = invertX;
+                _traces[i].InvertY = invertY;
+                _traces[i].XUnit = xUnit;
+                _traces[i].YUnit = yUnit;
+                _xUnit = xUnit;
+                RecalculateYAxisUnits();
+                ClearPersistentData();
+                SelectSourcesForTrace(_selectedTraceIndex);
+                return true;
+            }
+            return false;
         }
 
         public void UpdateTraceColour(string probeName, Brush colour)
@@ -137,7 +370,260 @@ namespace SimGUI
             {
                 if (_traces[i].ProbeName != probeName) continue;
                 _paths[i].Stroke = colour;
+                RefreshTraceSelector();
                 return;
+            }
+        }
+
+        private void ClearPersistentData()
+        {
+            for (int i = 0; i < MaxTraces; i++)
+            {
+                if (_persistentSegments[i] != null)
+                    _persistentSegments[i].Clear();
+                _persistentPointCounts[i] = 0;
+                _lastPersistedTickCount[i] = -1;
+            }
+        }
+
+        private void PersistenceToggle_Changed(object sender, RoutedEventArgs e)
+        {
+            ClearPersistentData();
+            _lastRedraw = DateTime.MinValue;
+            PlotAll();
+        }
+
+        private void ClearPersistenceButton_Click(object sender, RoutedEventArgs e)
+        {
+            ClearPersistentData();
+            for (int i = 0; i < _traceCount; i++) _paths[i].Data = null;
+            _lastRedraw = DateTime.MinValue;
+            PlotAll();
+        }
+
+        private void AppendPersistentSamples(int traceIndex, int totalTicks)
+        {
+            if (PersistenceToggle.IsChecked != true) return;
+            if (_sim == null || traceIndex < 0 || traceIndex >= _traceCount) return;
+
+            int lastTotal = _lastPersistedTickCount[traceIndex];
+            int newSamples = lastTotal < 0 ? Math.Min(totalTicks, DrawWindowTicks) : totalTicks - lastTotal;
+            if (newSamples <= 0) return;
+            if (newSamples > DrawWindowTicks) newSamples = DrawWindowTicks;
+
+            for (int i = newSamples; i >= 1; i--)
+            {
+                int tick = -i;
+                double x, y;
+                if (!TryReadTraceValue(traceIndex, tick, out x, out y)) continue;
+                AddPersistentPoint(traceIndex, new PersistedPoint { X = x, Y = y });
+            }
+
+            PrunePersistentTrace(traceIndex);
+            _lastPersistedTickCount[traceIndex] = totalTicks;
+        }
+
+        private void AddPersistentPoint(int traceIndex, PersistedPoint point)
+        {
+            List<PersistentSegment> segments = _persistentSegments[traceIndex];
+            PersistentSegment segment = segments.Count == 0 ? null : segments[segments.Count - 1];
+            if (segment == null || ShouldStartPersistentSegment(traceIndex, segment, point))
+            {
+                segment = new PersistentSegment();
+                segments.Add(segment);
+                if (segments.Count > MaxPersistentSegments)
+                {
+                    _persistentPointCounts[traceIndex] -= segments[0].Points.Count;
+                    segments.RemoveAt(0);
+                }
+            }
+
+            if (segment.Points.Count > 0)
+            {
+                PersistedPoint last = segment.Points[segment.Points.Count - 1];
+                double xRange = Math.Max(_xMax - _xMin, 1e-12);
+                double dxNorm = (point.X - last.X) / xRange;
+                if (Math.Abs(dxNorm) >= PersistentDirectionThreshold)
+                    segment.Direction = dxNorm > 0 ? 1 : -1;
+            }
+
+            segment.Points.Add(point);
+            _persistentPointCounts[traceIndex]++;
+        }
+
+        private bool ShouldStartPersistentSegment(int traceIndex, PersistentSegment segment, PersistedPoint point)
+        {
+            if (segment.Points.Count == 0) return false;
+
+            PersistedPoint last = segment.Points[segment.Points.Count - 1];
+            double xRange = Math.Max(_xMax - _xMin, 1e-12);
+            double yRange = Math.Max(GetTraceYMax(traceIndex) - GetTraceYMin(traceIndex), 1e-12);
+            double dxNorm = (point.X - last.X) / xRange;
+            double dyNorm = (point.Y - last.Y) / yRange;
+            double absDx = Math.Abs(dxNorm);
+            double absDy = Math.Abs(dyNorm);
+
+            if (absDx > PersistentAxisJumpThreshold || absDy > PersistentAxisJumpThreshold)
+                return true;
+            if (Math.Sqrt(absDx * absDx + absDy * absDy) > PersistentJumpThreshold)
+                return true;
+
+            if (segment.Direction != 0 && absDx >= PersistentDirectionThreshold && segment.Points.Count >= MinPersistentSegmentPoints)
+            {
+                int direction = dxNorm > 0 ? 1 : -1;
+                if (direction != segment.Direction) return true;
+            }
+
+            return false;
+        }
+
+        private void PrunePersistentTrace(int traceIndex)
+        {
+            List<PersistentSegment> segments = _persistentSegments[traceIndex];
+            while (_persistentPointCounts[traceIndex] > MaxPersistentPoints && segments.Count > 0)
+            {
+                int excess = _persistentPointCounts[traceIndex] - MaxPersistentPoints;
+                PersistentSegment first = segments[0];
+                if (first.Points.Count <= excess || first.Points.Count <= MinPersistentSegmentPoints)
+                {
+                    _persistentPointCounts[traceIndex] -= first.Points.Count;
+                    segments.RemoveAt(0);
+                    continue;
+                }
+
+                int remove = Math.Min(excess, Math.Min(1000, first.Points.Count - MinPersistentSegmentPoints));
+                first.Points.RemoveRange(0, remove);
+                _persistentPointCounts[traceIndex] -= remove;
+            }
+        }
+
+        private double GetTraceYMin(int traceIndex)
+        {
+            return _traces[traceIndex].YUnit == AxisUnit.Amps ? _yMinA : _yMinV;
+        }
+
+        private double GetTraceYMax(int traceIndex)
+        {
+            return _traces[traceIndex].YUnit == AxisUnit.Amps ? _yMaxA : _yMaxV;
+        }
+
+        private static bool ShouldBreakProjectedSegment(float px, float py, float lastPx, float lastPy)
+        {
+            if (float.IsNaN(lastPx) || float.IsNaN(lastPy)) return false;
+
+            float dx = px - lastPx;
+            float dy = py - lastPy;
+            return dx * dx + dy * dy > PlotSegmentBreakDistancePx * PlotSegmentBreakDistancePx;
+        }
+
+        private bool TryReadTraceValue(int traceIndex, int tick, out double x, out double y)
+        {
+            x = 0;
+            y = 0;
+            if (traceIndex < 0 || traceIndex >= _traceCount) return false;
+
+            int inId1 = _traces[traceIndex].InputVarId1;
+            int inId2 = _traces[traceIndex].InputVarId2;
+            int outId = _traces[traceIndex].OutputVarId;
+            int outId2 = _traces[traceIndex].OutputVarId2;
+            if (inId1 < 0 || outId < 0) return false;
+
+            try
+            {
+                x = _sim.GetValueOfVar(inId1, tick);
+                if (inId2 >= 0) x -= _sim.GetValueOfVar(inId2, tick);
+                if (_traces[traceIndex].InvertX) x = -x;
+
+                y = _sim.GetValueOfVar(outId, tick);
+                if (outId2 >= 0) y -= _sim.GetValueOfVar(outId2, tick);
+                if (_traces[traceIndex].InvertY) y = -y;
+            }
+            catch
+            {
+                return false;
+            }
+
+            return !(double.IsNaN(x) || double.IsInfinity(x) || double.IsNaN(y) || double.IsInfinity(y));
+        }
+
+        private void SourceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_updatingSourceSelectors || _traceCount == 0) return;
+            if (_selectedTraceIndex < 0 || _selectedTraceIndex >= _traceCount) return;
+
+            GraphSourceOption xSource = XAxisSourceCombo.SelectedItem as GraphSourceOption;
+            GraphSourceOption ySource = YAxisSourceCombo.SelectedItem as GraphSourceOption;
+            if (xSource == null || ySource == null) return;
+
+            _traces[_selectedTraceIndex].InputVarId1 = xSource.VarId1;
+            _traces[_selectedTraceIndex].InputVarId2 = xSource.VarId2;
+            _traces[_selectedTraceIndex].OutputVarId = ySource.VarId1;
+            _traces[_selectedTraceIndex].OutputVarId2 = ySource.VarId2;
+            _traces[_selectedTraceIndex].InvertX = xSource.Invert;
+            _traces[_selectedTraceIndex].InvertY = ySource.Invert;
+            _traces[_selectedTraceIndex].XUnit = xSource.Unit;
+            _traces[_selectedTraceIndex].YUnit = ySource.Unit;
+
+            if (ySource.SourceBrush != null && ySource.SourceBrush != Brushes.Transparent)
+            {
+                _paths[_selectedTraceIndex].Stroke = ySource.SourceBrush;
+                RefreshTraceSelector();
+            }
+
+            _xUnit = xSource.Unit;
+            RecalculateYAxisUnits();
+            _hasAutoScaled = false;
+            _epoch++;
+            ClearPersistentData();
+            UpdateGrid();
+            _lastRedraw = DateTime.MinValue;
+            PlotAll();
+        }
+
+        private void TraceSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_updatingTraceSelector) return;
+
+            TraceOption selectedTrace = TraceSelectorCombo.SelectedItem as TraceOption;
+            if (selectedTrace == null) return;
+
+            _selectedTraceIndex = selectedTrace.Index;
+            SelectSourcesForTrace(_selectedTraceIndex);
+        }
+
+        private void SelectSourcesForTrace(int traceIndex)
+        {
+            if (_traceCount == 0 || _sourceOptions.Count == 0) return;
+            if (traceIndex < 0 || traceIndex >= _traceCount) return;
+
+            _updatingSourceSelectors = true;
+            SelectMatchingSource(XAxisSourceCombo, _traces[traceIndex].InputVarId1, _traces[traceIndex].InputVarId2, _traces[traceIndex].InvertX, _traces[traceIndex].XUnit);
+            SelectMatchingSource(YAxisSourceCombo, _traces[traceIndex].OutputVarId, _traces[traceIndex].OutputVarId2, _traces[traceIndex].InvertY, _traces[traceIndex].YUnit);
+            _updatingSourceSelectors = false;
+        }
+
+        private static void SelectMatchingSource(ComboBox combo, int varId1, int varId2, bool invert, AxisUnit unit)
+        {
+            for (int i = 0; i < combo.Items.Count; i++)
+            {
+                GraphSourceOption option = combo.Items[i] as GraphSourceOption;
+                if (option == null) continue;
+                if (option.VarId1 == varId1 && option.VarId2 == varId2 && option.Invert == invert && option.Unit == unit)
+                {
+                    combo.SelectedIndex = i;
+                    return;
+                }
+            }
+        }
+
+        private void RecalculateYAxisUnits()
+        {
+            _hasVoltsY = false;
+            _hasAmpsY = false;
+            for (int i = 0; i < _traceCount; i++)
+            {
+                if (_traces[i].YUnit == AxisUnit.Volts) _hasVoltsY = true;
+                if (_traces[i].YUnit == AxisUnit.Amps) _hasAmpsY = true;
             }
         }
 
@@ -145,8 +631,14 @@ namespace SimGUI
         {
             _epoch++;
             _traceCount    = 0;
+            _selectedTraceIndex = 0;
             _hasAutoScaled = false;
+            _hasVoltsY = false;
+            _hasAmpsY = false;
+            _xUnit = AxisUnit.Volts;
             for (int i = 0; i < MaxTraces; i++) _paths[i].Data = null; 
+            ClearPersistentData();
+            RefreshTraceSelector();
             VLabels.Children.Clear(); HLabels.Children.Clear();
             NoDataOverlay.Visibility = Visibility.Visible;
         }
@@ -187,48 +679,102 @@ namespace SimGUI
     double xMin = _xMin, xMax = _xMax;
     double xR = Math.Max(xMax - xMin, 1e-12);
 
-    float[][] pxData = new float[_traceCount][];  
+    List<float[]>[] pxData = new List<float[]>[_traceCount];
     bool[] active    = new bool[_traceCount];
+    bool persistenceEnabled = PersistenceToggle != null && PersistenceToggle.IsChecked == true;
 
     for (int n = 0; n < _traceCount; n++)
     {
         int inId1 = _traces[n].InputVarId1;
-        int inId2 = _traces[n].InputVarId2;
         int outId = _traces[n].OutputVarId;
         if (inId1 < 0 || outId < 0) { _paths[n].Data = null; continue; }      
         
-        double yMin = (_traces[n].YUnit == AxisUnit.Amps) ? _yMinA : _yMinV;
-        double yMax = (_traces[n].YUnit == AxisUnit.Amps) ? _yMaxA : _yMaxV;
+        double yMin = GetTraceYMin(n);
+        double yMax = GetTraceYMax(n);
         double yR = Math.Max(yMax - yMin, 1e-12);
         
         active[n] = true;
-        var buf = new float[drawWindow * 2];
-        int write = 0;
+        if (persistenceEnabled) AppendPersistentSamples(n, totalTicks);
+
+        pxData[n] = new List<float[]>();
 
         try
         {
-            for (int i = 0; i < drawWindow; i++)
+            if (persistenceEnabled)
             {
-                int tick = -(drawWindow - i);
-                
-                // DIFFERENTIAL MATH INJECTION
-                double vIn = _sim.GetValueOfVar(inId1, tick);
-                if (inId2 >= 0) vIn -= _sim.GetValueOfVar(inId2, tick);
-                
-                double vOut = _sim.GetValueOfVar(outId, tick);
-                
-                // POLARITY INJECTION
-                if (_traces[n].InvertY) vOut = -vOut;
-                
-                if (double.IsNaN(vIn) || double.IsInfinity(vIn) ||
-                    double.IsNaN(vOut) || double.IsInfinity(vOut)) continue;
+                int persistentStride = 1;
+                if (_persistentPointCounts[n] > MaxPersistentRenderPoints)
+                    persistentStride = (int)Math.Ceiling((double)_persistentPointCounts[n] / MaxPersistentRenderPoints);
 
-                if (vIn  < xMin - xR || vIn  > xMax + xR) continue;
-                if (vOut < yMin - yR || vOut > yMax + yR) continue;
-                
-                buf[write]     = (float)((vIn  - xMin) / xR * plotW);
-                buf[write + 1] = (float)(plotH - (vOut - yMin) / yR * plotH);
-                write += 2;
+                List<PersistentSegment> segments = _persistentSegments[n];
+                var buf = new float[Math.Max(1, (_persistentPointCounts[n] + persistentStride - 1) / persistentStride) * 2];
+                int write = 0;
+                float lastPx = float.NaN;
+                float lastPy = float.NaN;
+
+                for (int s = 0; s < segments.Count; s++)
+                {
+                    List<PersistedPoint> points = segments[s].Points;
+
+                    for (int i = 0; i < points.Count; i += persistentStride)
+                    {
+                        double vIn = points[i].X;
+                        double vOut = points[i].Y;
+
+                        if (vIn  < xMin - xR || vIn  > xMax + xR) continue;
+                        if (vOut < yMin - yR || vOut > yMax + yR) continue;
+
+                        float px = (float)((vIn  - xMin) / xR * plotW);
+                        float py = (float)(plotH - (vOut - yMin) / yR * plotH);
+
+                        if (ShouldBreakProjectedSegment(px, py, lastPx, lastPy) && write >= 4)
+                        {
+                            if (write < buf.Length) Array.Resize(ref buf, write);
+                            pxData[n].Add(buf);
+                            buf = new float[Math.Max(4, (_persistentPointCounts[n] + persistentStride - 1) / persistentStride) * 2];
+                            write = 0;
+                        }
+
+                        buf[write]     = px;
+                        buf[write + 1] = py;
+                        write += 2;
+                        lastPx = px;
+                        lastPy = py;
+                    }
+                }
+
+                if (write >= 4)
+                {
+                    if (write < buf.Length) Array.Resize(ref buf, write);
+                    pxData[n].Add(buf);
+                }
+            }
+            else
+            {
+                var buf = new float[drawWindow * 2];
+                int write = 0;
+                for (int i = 0; i < drawWindow; i++)
+                {
+                    int tick = -(drawWindow - i);
+                    double vIn, vOut;
+                    if (!TryReadTraceValue(n, tick, out vIn, out vOut)) continue;
+
+                    if (vIn  < xMin - xR || vIn  > xMax + xR) continue;
+                    if (vOut < yMin - yR || vOut > yMax + yR) continue;
+
+                    float px = (float)((vIn  - xMin) / xR * plotW);
+                    float py = (float)(plotH - (vOut - yMin) / yR * plotH);
+
+                    buf[write]     = px;
+                    buf[write + 1] = py;
+                    write += 2;
+                }
+
+                if (write >= 4)
+                {
+                    if (write < buf.Length) Array.Resize(ref buf, write);
+                    pxData[n].Add(buf);
+                }
             }
         }
         catch
@@ -238,8 +784,12 @@ namespace SimGUI
             _paths[n].Data = null;
             active[n] = false;
         }
-        if (write < buf.Length) Array.Resize(ref buf, write);
-        pxData[n] = buf;
+
+        if (active[n] && pxData[n].Count == 0)
+        {
+            _paths[n].Data = null;
+            active[n] = false;
+        }
     }
 
     System.Threading.Interlocked.Increment(ref _pendingRenders);
@@ -250,46 +800,51 @@ namespace SimGUI
         var geometries = new StreamGeometry[_traceCount];
         for (int n = 0; n < _traceCount; n++)
         {
-            if (!active[n] || pxData[n] == null || pxData[n].Length < 2) continue;
-
-            float[] buf    = pxData[n];
-            int pointCount = buf.Length / 2;
+            if (!active[n] || pxData[n] == null || pxData[n].Count == 0) continue;
 
             var geo = new StreamGeometry();
             using (var ctx = geo.Open())
             {
-                bool first     = true;
-                float lastPx   = float.NaN, lastPy = float.NaN;
                 float clampMinX = -10f, clampMaxX = (float)(plotW  + 10);
                 float clampMinY = -10f, clampMaxY = (float)(plotH  + 10);
 
-                for (int i = 0; i < pointCount; i++)
+                for (int segmentIndex = 0; segmentIndex < pxData[n].Count; segmentIndex++)
                 {
-                    float px = buf[i * 2],     py = buf[i * 2 + 1];
+                    float[] buf = pxData[n][segmentIndex];
+                    int pointCount = buf.Length / 2;
+                    if (pointCount < 2) continue;
 
-                    if (px < clampMinX) px = clampMinX;
-                    else if (px > clampMaxX) px = clampMaxX;
-                    if (py < clampMinY) py = clampMinY;
-                    else if (py > clampMaxY) py = clampMaxY;
+                    bool first = true;
+                    float lastPx = float.NaN, lastPy = float.NaN;
 
-                    if (!first)
+                    for (int i = 0; i < pointCount; i++)
                     {
-                        float ddx = px - lastPx, ddy = py - lastPy;
-                        if (ddx * ddx + ddy * ddy < 1f) continue;
-                    }
+                        float px = buf[i * 2], py = buf[i * 2 + 1];
 
-                    var pt = new Point(px, py);
-                    if (first)
-                    {
-                        ctx.BeginFigure(pt, false, false);
-                        ctx.LineTo(new Point(px + 0.001, py), true, true);
-                        first = false;
+                        if (px < clampMinX) px = clampMinX;
+                        else if (px > clampMaxX) px = clampMaxX;
+                        if (py < clampMinY) py = clampMinY;
+                        else if (py > clampMaxY) py = clampMaxY;
+
+                        if (!first)
+                        {
+                            float ddx = px - lastPx, ddy = py - lastPy;
+                            if (ddx * ddx + ddy * ddy < 1f) continue;
+                        }
+
+                        var pt = new Point(px, py);
+                        if (first)
+                        {
+                            ctx.BeginFigure(pt, false, false);
+                            ctx.LineTo(new Point(px + 0.001, py), true, true);
+                            first = false;
+                        }
+                        else
+                        {
+                            ctx.LineTo(pt, true, true);
+                        }
+                        lastPx = px; lastPy = py;
                     }
-                    else
-                    {
-                        ctx.LineTo(pt, true, true);
-                    }
-                    lastPx = px; lastPy = py;
                 }
             }
             geo.Freeze();
@@ -303,8 +858,10 @@ namespace SimGUI
         if (!task.IsFaulted && threadEpoch == _epoch)
         {
             for (int n = 0; n < _traceCount; n++)
+            {
                 if (active[n] && task.Result[n] != null)
                     _paths[n].Data = task.Result[n];
+            }
         }
     }, TaskScheduler.FromCurrentSynchronizationContext());
 }
@@ -329,6 +886,7 @@ namespace SimGUI
         int inId1 = _traces[n].InputVarId1;
         int inId2 = _traces[n].InputVarId2;
         int outId = _traces[n].OutputVarId;
+        int outId2 = _traces[n].OutputVarId2;
         if (inId1 < 0 || outId < 0) continue;
         
         try
@@ -338,11 +896,13 @@ namespace SimGUI
                 int tick = -(boundsWindow - i); 
                 double vIn = _sim.GetValueOfVar(inId1, tick);
                 if (inId2 >= 0) vIn -= _sim.GetValueOfVar(inId2, tick);
+                if (_traces[n].InvertX) vIn = -vIn;
                 
                 double vOut = _sim.GetValueOfVar(outId, tick);
+                if (outId2 >= 0) vOut -= _sim.GetValueOfVar(outId2, tick);
                 if (_traces[n].InvertY) vOut = -vOut;
 
-                if (double.IsNaN(vIn) || double.IsNaN(vOut) || double.IsInfinity(vIn)) continue;
+                if (double.IsNaN(vIn) || double.IsNaN(vOut) || double.IsInfinity(vIn) || double.IsInfinity(vOut)) continue;
                 
                 if (vIn < xlo) xlo = vIn;  
                 if (vIn > xhi) xhi = vIn;
@@ -368,6 +928,7 @@ namespace SimGUI
     double yDivs = h / GridSpacingPx;
 
     // Scale X
+    ExpandDegenerateRange(ref xlo, ref xhi, _xUnit);
     double xMid = (xlo + xhi) / 2;
     double xVoltsPerDiv = NiceVoltsPerDiv(Math.Max(xhi - xlo, 1e-9) / (0.6 * xDivs));
     _xMin = xMid - xVoltsPerDiv * xDivs / 2;
@@ -375,6 +936,7 @@ namespace SimGUI
 
     // Scale Y (Volts)
     if (_hasVoltsY && yhiV >= yloV) {
+        ExpandDegenerateRange(ref yloV, ref yhiV, AxisUnit.Volts);
         double yMidV = (yloV + yhiV) / 2;
         double yVoltsPerDiv = NiceVoltsPerDiv(Math.Max(yhiV - yloV, 1e-9) / (0.6 * yDivs));
         _yMinV = yMidV - yVoltsPerDiv * yDivs / 2;
@@ -383,6 +945,7 @@ namespace SimGUI
 
     // Scale Y (Amps)
     if (_hasAmpsY && yhiA >= yloA) {
+        ExpandDegenerateRange(ref yloA, ref yhiA, AxisUnit.Amps);
         double yMidA = (yloA + yhiA) / 2;
         double yAmpsPerDiv = NiceVoltsPerDiv(Math.Max(yhiA - yloA, 1e-9) / (0.6 * yDivs));
 
@@ -432,6 +995,23 @@ namespace SimGUI
     
             foreach (double v in steps) if (v >= raw) return v;
             return 100;
+        }
+
+        private static void ExpandDegenerateRange(ref double lo, ref double hi, AxisUnit unit)
+        {
+            if (hi < lo) return;
+
+            double span = hi - lo;
+            double mid = (lo + hi) / 2.0;
+            double minSpan = unit == AxisUnit.Amps
+                ? Math.Max(Math.Abs(mid) * 0.2, 0.001)
+                : Math.Max(Math.Abs(mid) * 0.2, 1.0);
+
+            if (span >= minSpan) return;
+
+            double halfSpan = minSpan / 2.0;
+            lo = mid - halfSpan;
+            hi = mid + halfSpan;
         }
 
         private void AutoScaleAndPlot()
@@ -656,7 +1236,7 @@ namespace SimGUI
                     }
                 }
                 drawGridLines = false; // Grid is drawn, Amps will perfectly overlay it
-                AddAxisTitle(VLabels, "V_out", VerticalAlignment.Top, HorizontalAlignment.Left, new Thickness(2, 4, 0, 0));
+                AddAxisTitle(VLabels, "Voltage (V)", VerticalAlignment.Top, HorizontalAlignment.Left, new Thickness(2, 4, 0, 0));
             }
 
             // Draw Amps Y-Axis (Right)
@@ -691,7 +1271,7 @@ namespace SimGUI
             GraphDividers.Data = gridLines;
             GraphOriginAxes.Data = originLines;
 
-            AddAxisTitle(HLabels, "V_in", VerticalAlignment.Top, HorizontalAlignment.Right, new Thickness(0, -16, 4, 0));
+            AddAxisTitle(HLabels, _xUnit == AxisUnit.Amps ? "Current (I)" : "Voltage (V)", VerticalAlignment.Top, HorizontalAlignment.Right, new Thickness(0, -16, 4, 0));
         }
 
         private void AddAxisTitle(Grid parent, string text, VerticalAlignment va, HorizontalAlignment ha, Thickness margin)
@@ -780,8 +1360,10 @@ namespace SimGUI
                         {
                             double vIn = _sim.GetValueOfVar(_traces[n].InputVarId1, i);
                             if (_traces[n].InputVarId2 >= 0) vIn -= _sim.GetValueOfVar(_traces[n].InputVarId2, i);
+                            if (_traces[n].InvertX) vIn = -vIn;
                     
                             double vOut = _sim.GetValueOfVar(_traces[n].OutputVarId, i);
+                            if (_traces[n].OutputVarId2 >= 0) vOut -= _sim.GetValueOfVar(_traces[n].OutputVarId2, i);
                             if (_traces[n].InvertY) vOut = -vOut;
 
                             line += "," + vIn.ToString("G5", CultureInfo.InvariantCulture);

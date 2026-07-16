@@ -9,6 +9,7 @@
         <CommandBinding Command="ApplicationCommands.Open" Executed="Open_Executed"/>
         <CommandBinding Command="ApplicationCommands.Save" Executed="Save_Executed"/>
         <CommandBinding Command="ApplicationCommands.SaveAs" Executed="Save_Executed"/>
+        <CommandBinding Command="this:CustomCommands.ExportNetlist" Executed="ExportNetlist_Executed"/>
 
         <CommandBinding Command="ApplicationCommands.Undo" Executed="Undo_Executed" CanExecute="Undo_CanExecute"/>
         <CommandBinding Command="ApplicationCommands.Redo" Executed="Redo_Executed" CanExecute="Redo_CanExecute"/>
@@ -42,6 +43,8 @@
                 </MenuItem>
                 <MenuItem x:Name="File_Save" Command="ApplicationCommands.Save"/>
                 <MenuItem x:Name="File_Save_As" Command="ApplicationCommands.SaveAs"/>
+                <Separator/>
+                <MenuItem x:Name="File_Export_Netlist" Command="this:CustomCommands.ExportNetlist"/>
 
             </MenuItem>
             <MenuItem Header="_Edit">

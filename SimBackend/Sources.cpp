@@ -7,6 +7,8 @@ void SineSource::SetParameters(ParameterSet params) {
     Frequency = params.getDouble("freq", 1.0);
     Offset = params.getDouble("off", 0.0);
     WaveType = (int)params.getDouble("type", 0.0);
+    StairSteps = (int)(params.getDouble("steps", 5.0) + 0.5);
+    if (StairSteps < 1) StairSteps = 1;
     
     // Catch the new flag sent from the C# UI
     StartupTransientFlag = params.getDouble("startup", 0.0);
@@ -38,8 +40,8 @@ double SineSource::TransientFunction(TransientSolver *solver, int f) {
     // Start with the DC offset baseline
     double targetV = Offset;
     
-    // Only calculate and add the AC phase if it is NOT the DC mode (WaveType 3)
-    if (WaveType != 3) {
+    // Only calculate and add the changing component if it is NOT the DC mode (WaveType 3)
+    if (WaveType != 3 && Frequency > 0.0) {
         double period = 1.0 / Frequency;
         double phase = fmod(time, period) / period;
         
@@ -53,6 +55,15 @@ double SineSource::TransientFunction(TransientSolver *solver, int f) {
             if (phase < 0.25) targetV += Amplitude * (4.0 * phase);
             else if (phase < 0.75) targetV += Amplitude * (2.0 - 4.0 * phase);
             else targetV += Amplitude * (4.0 * phase - 4.0);
+        }
+        else if (WaveType == 4) {
+            int stepIndex = (int)(phase * StairSteps);
+            if (stepIndex >= StairSteps) stepIndex = StairSteps - 1;
+            double fraction = StairSteps <= 1 ? 0.0 : (double)stepIndex / (double)(StairSteps - 1);
+            targetV += Amplitude * fraction;
+        }
+        else if (WaveType == 5) {
+            targetV += Amplitude * phase;
         }
     }
     

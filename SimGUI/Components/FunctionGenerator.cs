@@ -14,6 +14,7 @@ namespace SimGUI
         // Can't use negative numbers, so just using a flag
         public Quantity InvertOffset = new Quantity("Inv", "Invert Offset (0=No, 1=Yes)", "") { Val = 0.0 };
         public Quantity PowerOnTransient = new Quantity("Startup", "Simulate Power-On Transient (0=No, 1=Yes)", "") { Val = 0.0 };
+        public Quantity StairSteps = new Quantity("Steps", "Staircase Steps", "") { Val = 5.0, AllowZero = false };
         public string Waveform = "Sine";
 
         public FunctionGenerator(Circuit parent, Point origin) : base(parent, origin)
@@ -28,13 +29,14 @@ namespace SimGUI
 
         protected override bool SetupPropertiesDialog(ComponentProperties dialog)
         {
-            dialog.AddModels(new List<string> { "Sine", "Square", "Triangle", "DC" });
+            dialog.AddModels(new List<string> { "Sine", "Square", "Triangle", "Ramp", "Staircase", "DC" });
             dialog.SelectModel(Waveform);
             dialog.AddQuantity(ComponentValue);
             dialog.AddQuantity(Amplitude);
             dialog.AddQuantity(Offset);
             dialog.AddQuantity(InvertOffset); 
             dialog.AddQuantity(PowerOnTransient);
+            dialog.AddQuantity(StairSteps);
             return true;
         }
 
@@ -46,6 +48,7 @@ namespace SimGUI
             Offset.Val = dialog.Parameters[2].Val;
             InvertOffset.Val = dialog.Parameters[3].Val;
             PowerOnTransient.Val = dialog.Parameters[4].Val;
+            StairSteps.Val = dialog.Parameters[5].Val;
             UpdateText();
             ParentCircuit.ParentWindow.UpdatePrompt();
         }
@@ -58,6 +61,7 @@ namespace SimGUI
             p["inv"] = InvertOffset.Val.ToString();
             p["wave"] = Waveform;
             p["startup"] = PowerOnTransient.Val.ToString();
+            p["steps"] = StairSteps.Val.ToString();
             return p;
         }
 
@@ -69,6 +73,7 @@ namespace SimGUI
             if (parameters.ContainsKey("inv")) InvertOffset.Val = double.Parse(parameters["inv"]);
             if (parameters.ContainsKey("wave")) Waveform = parameters["wave"];
             if (parameters.ContainsKey("startup")) PowerOnTransient.Val = double.Parse(parameters["startup"]);
+            if (parameters.ContainsKey("steps")) StairSteps.Val = double.Parse(parameters["steps"]);
             UpdateText();
         }
 
@@ -81,11 +86,13 @@ namespace SimGUI
             if (Waveform == "Square") waveType = 1;
             if (Waveform == "Triangle") waveType = 2;
             if (Waveform == "DC") waveType = 3;
+            if (Waveform == "Staircase") waveType = 4;
+            if (Waveform == "Ramp") waveType = 5;
 
             // If InvertOffset is 1 (or anything greater than 0), multiply by -1. Otherwise, keep it positive.
             double actualOffset = Offset.Val * (InvertOffset.Val > 0 ? -1 : 1);
 
-            return $"V_SINE {ID} {n1} {n2} amp={Amplitude.Val} freq={ComponentValue.Val} off={actualOffset} type={waveType} startup={PowerOnTransient.Val}";
+            return $"V_SINE {ID} {n1} {n2} amp={Amplitude.Val} freq={ComponentValue.Val} off={actualOffset} type={waveType} startup={PowerOnTransient.Val} steps={StairSteps.Val}";
             
         }
 
@@ -110,6 +117,8 @@ namespace SimGUI
                 if (path.Name == "icon_sine") path.Visibility = Waveform == "Sine" ? Visibility.Visible : Visibility.Hidden;
                 if (path.Name == "icon_square") path.Visibility = Waveform == "Square" ? Visibility.Visible : Visibility.Hidden;
                 if (path.Name == "icon_triangle") path.Visibility = Waveform == "Triangle" ? Visibility.Visible : Visibility.Hidden;
+                if (path.Name == "icon_ramp") path.Visibility = Waveform == "Ramp" ? Visibility.Visible : Visibility.Hidden;
+                if (path.Name == "icon_staircase") path.Visibility = Waveform == "Staircase" ? Visibility.Visible : Visibility.Hidden;
                 if (path.Name == "icon_dc1" || path.Name == "icon_dc2") path.Visibility = Waveform == "DC" ? Visibility.Visible : Visibility.Hidden;
             }
 

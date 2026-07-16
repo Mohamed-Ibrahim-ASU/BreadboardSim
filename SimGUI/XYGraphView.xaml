@@ -85,11 +85,118 @@
             <Setter Property="Padding"         Value="8,6"/>
             <Setter Property="HasDropShadow"   Value="True"/>
         </Style>
+
+        <DataTemplate x:Key="GraphSourceItemTemplate">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Border Width="8" Height="8"
+                        Margin="0,0,6,0"
+                        Background="{Binding SourceBrush}"
+                        BorderBrush="#555"
+                        BorderThickness="1"/>
+                <TextBlock Text="{Binding}"
+                           FontSize="11"
+                           Foreground="{Binding SourceBrush}"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis"/>
+            </StackPanel>
+        </DataTemplate>
+
+        <Style x:Key="GraphSourceComboStyle" TargetType="ComboBox">
+            <Setter Property="Foreground" Value="#333"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#C8C8C8"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="4,1"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="ItemTemplate" Value="{StaticResource GraphSourceItemTemplate}"/>
+            <Setter Property="ItemContainerStyle">
+                <Setter.Value>
+                    <Style TargetType="ComboBoxItem">
+                        <Setter Property="Padding" Value="6,3"/>
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                    </Style>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton x:Name="ToggleButton"
+                                          Focusable="False"
+                                          ClickMode="Press"
+                                          Background="{TemplateBinding Background}"
+                                          BorderBrush="{TemplateBinding BorderBrush}"
+                                          BorderThickness="{TemplateBinding BorderThickness}"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border x:Name="Chrome"
+                                                Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                CornerRadius="4">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="18"/>
+                                                </Grid.ColumnDefinitions>
+                                                <ContentPresenter Grid.Column="0"
+                                                                  Margin="6,0,0,0"
+                                                                  HorizontalAlignment="Left"
+                                                                  VerticalAlignment="Center"
+                                                                  IsHitTestVisible="False"
+                                                                  Content="{Binding SelectionBoxItem, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                                                  ContentTemplate="{Binding SelectionBoxItemTemplate, RelativeSource={RelativeSource AncestorType=ComboBox}}"/>
+                                                <Path Grid.Column="1"
+                                                      HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center"
+                                                      Fill="#505050"
+                                                      Data="M 0 0 L 4 4 L 8 0 Z"/>
+                                            </Grid>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Chrome" Property="BorderBrush" Value="#9E9E9E"/>
+                                            </Trigger>
+                                            <Trigger Property="IsChecked" Value="True">
+                                                <Setter TargetName="Chrome" Property="BorderBrush" Value="#8A8A8A"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+
+                            <Popup x:Name="Popup"
+                                   Placement="Bottom"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   PopupAnimation="Slide"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}">
+                                <Grid MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
+                                      MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                                    <Border Background="White"
+                                            BorderBrush="#C8C8C8"
+                                            BorderThickness="1"
+                                            CornerRadius="4"/>
+                                    <ScrollViewer Margin="2"
+                                                  SnapsToDevicePixels="True">
+                                        <ItemsPresenter/>
+                                    </ScrollViewer>
+                                </Grid>
+                            </Popup>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
     </Window.Resources>
 
     <!-- ══ same 3-row × 3-col skeleton as GraphView.xaml ══════════════════ -->
     <Grid x:Name="MainGrid">
         <Grid.RowDefinitions>
+            <RowDefinition Height="34"/>   <!-- source selectors -->
             <RowDefinition Height="1*"/>   <!-- plot row         -->
             <RowDefinition Height="30"/>   <!-- H-labels / X-axis-->
             <RowDefinition Height="36"/>   <!-- toolbar          -->
@@ -97,23 +204,76 @@
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="65"/> <ColumnDefinition Width="1*"/> <ColumnDefinition Width="65"/> </Grid.ColumnDefinitions>
 
+        <Border Grid.Column="0" Grid.ColumnSpan="3" Grid.Row="0"
+                Background="#F8F9FA" BorderBrush="#D0D0D0"
+                BorderThickness="0,0,0,1" Padding="8,4">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="Trace"
+                           VerticalAlignment="Center"
+                           Margin="0,0,6,0"
+                           Foreground="#333"
+                           FontSize="11"/>
+                <ComboBox x:Name="TraceSelectorCombo"
+                          Width="112"
+                          Height="22"
+                          Style="{StaticResource GraphSourceComboStyle}"
+                          Margin="0,0,10,0"
+                          SelectionChanged="TraceSelector_SelectionChanged"/>
+                <Button Content="+"
+                        Width="22"
+                        Height="22"
+                        Padding="0"
+                        Margin="0,0,3,0"
+                        Click="AddTraceButton_Click"
+                        ToolTip="Add an editable curve tracer trace."/>
+                <Button Content="-"
+                        Width="22"
+                        Height="22"
+                        Padding="0"
+                        Margin="0,0,10,0"
+                        Click="RemoveTraceButton_Click"
+                        ToolTip="Remove the selected curve tracer trace."/>
+                <TextBlock Text="X-Axis Source"
+                           VerticalAlignment="Center"
+                           Margin="0,0,6,0"
+                           Foreground="#333"
+                           FontSize="11"/>
+                <ComboBox x:Name="XAxisSourceCombo"
+                          Width="172"
+                          Height="22"
+                          Style="{StaticResource GraphSourceComboStyle}"
+                          Margin="0,0,10,0"
+                          SelectionChanged="SourceCombo_SelectionChanged"/>
+                <TextBlock Text="Y-Axis Source"
+                           VerticalAlignment="Center"
+                           Margin="0,0,6,0"
+                           Foreground="#333"
+                           FontSize="11"/>
+                <ComboBox x:Name="YAxisSourceCombo"
+                          Width="172"
+                          Height="22"
+                          Style="{StaticResource GraphSourceComboStyle}"
+                          SelectionChanged="SourceCombo_SelectionChanged"/>
+            </StackPanel>
+        </Border>
+
         <!-- ── Plot background (LightYellow — matches GraphArea) ─────────── -->
-        <Canvas x:Name="PlotArea"   Grid.Column="1" Grid.Row="0"
+        <Canvas x:Name="PlotArea"   Grid.Column="1" Grid.Row="1"
                 ClipToBounds="True" Background="LightYellow"/>
 
         <!-- ── Grid lines (single Path, drawn in code — matches GraphDividers) -->
-        <Path   x:Name="GraphDividers" Grid.Column="1" Grid.Row="0"
+        <Path   x:Name="GraphDividers" Grid.Column="1" Grid.Row="1"
                 Stroke="#B0B0B0" StrokeThickness="0.8" IsHitTestVisible="False"/>
                 
-        <Path   x:Name="GraphOriginAxes" Grid.Column="1" Grid.Row="0"
+        <Path   x:Name="GraphOriginAxes" Grid.Column="1" Grid.Row="1"
                 Stroke="#444" StrokeThickness="1.5" IsHitTestVisible="False"/>
 
         <!-- ── Trace canvas (Polylines added in constructor) ─────────────── -->
-        <Canvas x:Name="TraceCanvas" Grid.Column="1" Grid.Row="0"
+        <Canvas x:Name="TraceCanvas" Grid.Column="1" Grid.Row="1"
                 IsHitTestVisible="False" ClipToBounds="True"/>
 
         <!-- ── Hover overlay (crosshair + tooltip) ───────────────────────── -->
-        <Canvas x:Name="HoverOverlay" Grid.Column="1" Grid.Row="0"
+        <Canvas x:Name="HoverOverlay" Grid.Column="1" Grid.Row="1"
                 Background="Transparent" ClipToBounds="True" Panel.ZIndex="20"
                 MouseDown="HoverOverlay_MouseDown"
                 MouseUp="HoverOverlay_MouseUp"
@@ -135,7 +295,7 @@
 
         <!-- ── No-data overlay (LightYellow — matches plot BG) ──────────── -->
         <Border x:Name="NoDataOverlay"
-                Grid.Column="1" Grid.Row="0"
+                Grid.Column="1" Grid.Row="1"
                 Background="LightYellow"
                 Visibility="Visible" IsHitTestVisible="False" Panel.ZIndex="15">
             <TextBlock Text="Place an XY Transfer Probe on the breadboard, then start the simulation."
@@ -145,14 +305,14 @@
         </Border>
 
         <!-- ── V-labels column (matches GraphView VLabels) ───────────────── -->
-        <Grid x:Name="VLabels" Grid.Column="0" Grid.Row="0" Background="Transparent"/>
+        <Grid x:Name="VLabels" Grid.Column="0" Grid.Row="1" Background="Transparent"/>
         
-        <Grid x:Name="CurrentVLabels" Grid.Column="2" Grid.Row="0" Background="Transparent"/>
+        <Grid x:Name="CurrentVLabels" Grid.Column="2" Grid.Row="1" Background="Transparent"/>
         
 
         <!-- ── H-labels row (matches GraphView HLabels) ──────────────────── -->
         <Border x:Name="ControlsHint"
-                Grid.Column="1" Grid.Row="0"
+                Grid.Column="1" Grid.Row="1"
                 VerticalAlignment="Bottom" HorizontalAlignment="Center"
                 Margin="0,0,0,4"
                 Background="#77404040" CornerRadius="3" Padding="7,3"
@@ -160,10 +320,10 @@
             <TextBlock Foreground="White" FontSize="10"
                        Text="Scroll: zoom  |  Ctrl+Scroll: zoom X  |  Shift+Scroll: zoom Y  |  Middle drag: pan  |  A / dbl-click: fit"/>
         </Border>
-        <Grid x:Name="HLabels" Grid.Column="1" Grid.Row="1" Background="Transparent"/>
+        <Grid x:Name="HLabels" Grid.Column="1" Grid.Row="2" Background="Transparent"/>
 
         <!-- ── Toolbar (matches GraphView toolbar row) ───────────────────── -->
-        <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3"
+        <StackPanel Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     VerticalAlignment="Center"
@@ -174,6 +334,12 @@
             <Button Content="Export CSV" Margin="0,0,6,0"
                     Click="ExportCsvButton_Click"
                     ToolTip="Save the XY trace data to a CSV file."/>
+            <ToggleButton x:Name="PersistenceToggle" Content="Persistence" Margin="0,0,6,0"
+                          Checked="PersistenceToggle_Changed" Unchecked="PersistenceToggle_Changed"
+                          ToolTip="Accumulate XY samples using the current source selection."/>
+            <Button Content="Clear" Margin="0,0,6,0"
+                    Click="ClearPersistenceButton_Click"
+                    ToolTip="Clear accumulated XY samples."/>
             <ToggleButton x:Name="HoverToggle" Content="Hover Probe" Margin="0,0,6,0"
                           Checked="HoverToggle_Changed" Unchecked="HoverToggle_Changed"
                           ToolTip="Show a live crosshair with V_in / V_out readout."/>

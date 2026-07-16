@@ -88,6 +88,31 @@ namespace SimGUI
 
         public GraphView CurrentGraph = null;
         public XYGraphView CurrentXYGraph = null;
+        private List<GraphSource> _graphSources = new List<GraphSource>();
+
+        private enum GraphSourceKind
+        {
+            Probe,
+            DiffProbe,
+            CurrentProbe,
+            XYProbeInput,
+            XYProbeOutput,
+            IVProbeVoltage,
+            IVProbeCurrent
+        }
+
+        private sealed class GraphSource
+        {
+            public string Key;
+            public string DisplayName;
+            public string OwnerId;
+            public GraphSourceKind Kind;
+            public XYGraphView.AxisUnit Unit;
+            public int VarId1;
+            public int VarId2;
+            public bool Invert;
+            public Brush PreferredColour;
+        }
 
         public MainWindow()
         {
@@ -578,6 +603,10 @@ private void UpdateHoverBox(Point mousePos)
                                 else if (cp.TargetPinNumber == 2) simPinTarget = 1; // Collector
                                 else if (cp.TargetPinNumber == 3) simPinTarget = 2; // Base
                             }
+                            else if (targetComp.ComponentModel != null && (targetComp.ComponentModel.ToLower().Contains("bc337") || targetComp.ComponentModel.ToLower().Contains("bc327")))
+                            {
+                                simPinTarget = cp.TargetPinNumber; // 1:1 Match (1=C, 2=B, 3=E)
+                            }
                             else
                             {
                                 // Standard BJT Physical (like 2N2222): 1=E, 2=B, 3=C
@@ -879,6 +908,10 @@ private void UpdateHoverBox(Point mousePos)
                                                     if (pNum == 1) simPinTarget = 3;      // Emitter
                                                     else if (pNum == 2) simPinTarget = 1; // Collector
                                                     else if (pNum == 3) simPinTarget = 2; // Base
+                                                }
+                                                else if (parentComponent.ComponentModel != null && (parentComponent.ComponentModel.ToLower().Contains("bc337") || parentComponent.ComponentModel.ToLower().Contains("bc327")))
+                                                {
+                                                    simPinTarget = pNum; // 1:1 Match (1=C, 2=B, 3=E)
                                                 }
                                                 else
                                                 {
@@ -1270,6 +1303,17 @@ private void UpdateHoverBox(Point mousePos)
                     c.UpdateFromSimulation(0, CurrentSimulator, SimulationEvent.STARTED);
                 }
 
+                _graphSources = BuildGraphSources();
+                foreach (GraphSource source in _graphSources)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        "GraphSource: " + source.DisplayName +
+                        " [" + source.Unit + "] " +
+                        "VarId1=" + source.VarId1 +
+                        " VarId2=" + source.VarId2 +
+                        " Invert=" + source.Invert);
+                }
+
                 int numberOfTraces = 0;
                 
                 if (seamless && CurrentGraph != null) 
@@ -1277,7 +1321,8 @@ private void UpdateHoverBox(Point mousePos)
                     foreach (Probe p in circuit.Components.OfType<Probe>()) 
                     {
                         int varId = p.ConnectedNets.ContainsKey(1) ? CurrentSimulator.GetNetVoltageVarId(p.ConnectedNets[1]) : -1;
-                        CurrentGraph.UpdateTraceMapping(p.ID, varId);
+                        if (p.ProbeColour != Brushes.Transparent) CurrentGraph.UpdateTraceMapping(p.ID, varId, -1, p.ProbeColour);
+                        else CurrentGraph.UpdateTraceMapping(p.ID, varId);
                     }
                 } 
                 else 
@@ -1286,10 +1331,13 @@ private void UpdateHoverBox(Point mousePos)
                     {
                         Trace t = new Trace();
                         int varId = p.ConnectedNets.ContainsKey(1) ? CurrentSimulator.GetNetVoltageVarId(p.ConnectedNets[1]) : -1;
+                        Brush savedColor = p.ProbeColour;
                         
                         if (CurrentGraph != null && CurrentGraph.AddTrace(p.ID, varId, ref t))
                         {
-                            numberOfTraces++; p.SetProbeColour(t.TraceBrush);
+                            numberOfTraces++;
+                            if (savedColor != Brushes.Transparent) CurrentGraph.UpdateTraceMapping(p.ID, varId, -1, savedColor);
+                            else p.SetProbeColour(t.TraceBrush);
                         }
                     }
                 }
@@ -1333,6 +1381,8 @@ private void UpdateHoverBox(Point mousePos)
         {
             if (targetComp.ComponentModel != null && targetComp.ComponentModel.ToLower().Contains("bc639")) {
                 if (cp.TargetPinNumber == 1) simPinTarget = 3; else if (cp.TargetPinNumber == 2) simPinTarget = 1; else if (cp.TargetPinNumber == 3) simPinTarget = 2;
+            } else if (targetComp.ComponentModel != null && (targetComp.ComponentModel.ToLower().Contains("bc337") || targetComp.ComponentModel.ToLower().Contains("bc327"))) {
+                simPinTarget = cp.TargetPinNumber;
             } else {
                 if (cp.TargetPinNumber == 1) simPinTarget = 3; else if (cp.TargetPinNumber == 2) simPinTarget = 2; else if (cp.TargetPinNumber == 3) simPinTarget = 1;
             }
@@ -1354,6 +1404,8 @@ else
         {
             if (targetComp.ComponentModel != null && targetComp.ComponentModel.ToLower().Contains("bc639")) {
                 if (cp.TargetPinNumber == 1) simPinTarget = 3; else if (cp.TargetPinNumber == 2) simPinTarget = 1; else if (cp.TargetPinNumber == 3) simPinTarget = 2;
+            } else if (targetComp.ComponentModel != null && (targetComp.ComponentModel.ToLower().Contains("bc337") || targetComp.ComponentModel.ToLower().Contains("bc327"))) {
+                simPinTarget = cp.TargetPinNumber;
             } else {
                 if (cp.TargetPinNumber == 1) simPinTarget = 3; else if (cp.TargetPinNumber == 2) simPinTarget = 2; else if (cp.TargetPinNumber == 3) simPinTarget = 1;
             }
@@ -1392,15 +1444,52 @@ else
               // ── Parametric (XY & IV) Probes ─────────────────────────────────────────
                 var xyProbes = circuit.Components.OfType<XYProbe>().ToList();
                 var ivProbes = circuit.Components.OfType<IVProbe>().ToList();
+                GraphSource defaultXSource = _graphSources.FirstOrDefault(s => s.Unit == XYGraphView.AxisUnit.Volts);
+                if (defaultXSource == null) defaultXSource = _graphSources.FirstOrDefault();
+                GraphSource defaultYSource = _graphSources.FirstOrDefault(s => s.Unit == XYGraphView.AxisUnit.Amps && s != defaultXSource);
+                if (defaultYSource == null) defaultYSource = _graphSources.FirstOrDefault(s => s != defaultXSource);
+                bool hasProMenuDefault = defaultXSource != null && defaultYSource != null;
 
-                if (xyProbes.Count > 0 || ivProbes.Count > 0)
+                if (xyProbes.Count > 0 || ivProbes.Count > 0 || hasProMenuDefault)
                 {
+                    bool createdXYGraph = false;
                     if (CurrentXYGraph == null)
+                    {
                         CurrentXYGraph = new XYGraphView();
+                        createdXYGraph = true;
+                    }
                     else if (!seamless)
                         CurrentXYGraph.ResetAll();
 
-                    if (!seamless) CurrentXYGraph.StartSim(CurrentSimulator);
+                    if (!seamless || createdXYGraph) CurrentXYGraph.StartSim(CurrentSimulator);
+
+                    if (xyProbes.Count == 0 && ivProbes.Count == 0 && hasProMenuDefault)
+                    {
+                        if (seamless)
+                        {
+                            Brush proMenuColour = defaultYSource.PreferredColour != null && defaultYSource.PreferredColour != Brushes.Transparent
+                                ? defaultYSource.PreferredColour
+                                : Brushes.Transparent;
+                            if (!CurrentXYGraph.UpdateXYTraceSource(
+                                XYGraphView.DefaultUserTraceName, defaultXSource.VarId1, defaultXSource.VarId2, defaultYSource.VarId1,
+                                defaultXSource.Unit, defaultYSource.Unit, defaultYSource.Invert, defaultXSource.Invert, defaultYSource.VarId2))
+                            {
+                                CurrentXYGraph.AddXYTrace(
+                                    XYGraphView.DefaultUserTraceName, defaultXSource.VarId1, defaultXSource.VarId2, defaultYSource.VarId1,
+                                    proMenuColour, defaultXSource.Unit, defaultYSource.Unit, defaultYSource.Invert, defaultXSource.Invert, defaultYSource.VarId2);
+                            }
+                        }
+                        else
+                        {
+                            Brush proMenuColour = defaultYSource.PreferredColour != null && defaultYSource.PreferredColour != Brushes.Transparent
+                                ? defaultYSource.PreferredColour
+                                : Brushes.Transparent;
+                            CurrentXYGraph.AddXYTrace(
+                                XYGraphView.DefaultUserTraceName, defaultXSource.VarId1, defaultXSource.VarId2, defaultYSource.VarId1,
+                                proMenuColour, defaultXSource.Unit, defaultYSource.Unit, defaultYSource.Invert, defaultXSource.Invert, defaultYSource.VarId2);
+                            numberOfTraces++;
+                        }
+                    }
 
                     // 1. Process standard XY Probes (V/V)
                     foreach (XYProbe xp in xyProbes)
@@ -1433,6 +1522,8 @@ else
                             {
                                 if (target.ComponentModel != null && target.ComponentModel.ToLower().Contains("bc639")) {
                                     if (ivp.TargetPinNumber == 1) simPinTarget = 3; else if (ivp.TargetPinNumber == 2) simPinTarget = 1; else if (ivp.TargetPinNumber == 3) simPinTarget = 2;
+                                } else if (target.ComponentModel != null && (target.ComponentModel.ToLower().Contains("bc337") || target.ComponentModel.ToLower().Contains("bc327"))) {
+                                    simPinTarget = ivp.TargetPinNumber;
                                 } else {
                                     if (ivp.TargetPinNumber == 1) simPinTarget = 3; else if (ivp.TargetPinNumber == 2) simPinTarget = 2; else if (ivp.TargetPinNumber == 3) simPinTarget = 1;
                                 }
@@ -1472,6 +1563,9 @@ else
                         }
                     }
 
+                    _graphSources = BuildGraphSources();
+                    CurrentXYGraph.SetGraphSourceOptions(_graphSources.Select(CreateGraphSourceOption));
+
                     if (!seamless && !CurrentXYGraph.IsVisible) CurrentXYGraph.Show();
                 }
                 // ────────────────────────────────────────────────────────────────────────
@@ -1480,6 +1574,216 @@ else
                 if(numberOfTraces > 0 && CurrentGraph != null && !CurrentGraph.IsVisible) CurrentGraph.Show();
                 if (!UpdateTimer.IsEnabled) UpdateTimer.Start();
             }
+        }
+
+        private List<GraphSource> BuildGraphSources()
+        {
+            List<GraphSource> sources = new List<GraphSource>();
+
+            foreach (Probe p in circuit.Components.OfType<Probe>())
+            {
+                int varId = p.ConnectedNets.ContainsKey(1) ? CurrentSimulator.GetNetVoltageVarId(p.ConnectedNets[1]) : -1;
+                if (varId < 0) continue;
+
+                sources.Add(new GraphSource
+                {
+                    Key = p.ID + ":V",
+                    DisplayName = p.ID + " Voltage",
+                    OwnerId = p.ID,
+                    Kind = GraphSourceKind.Probe,
+                    Unit = XYGraphView.AxisUnit.Volts,
+                    VarId1 = varId,
+                    VarId2 = -1,
+                    Invert = false,
+                    PreferredColour = p.ProbeColour
+                });
+            }
+
+            foreach (DiffProbe dp in circuit.Components.OfType<DiffProbe>())
+            {
+                int v1 = dp.ConnectedNets.ContainsKey(1) ? CurrentSimulator.GetNetVoltageVarId(dp.ConnectedNets[1]) : -1;
+                int v2 = dp.ConnectedNets.ContainsKey(2) ? CurrentSimulator.GetNetVoltageVarId(dp.ConnectedNets[2]) : -1;
+                if (v1 < 0 || v2 < 0) continue;
+
+                sources.Add(new GraphSource
+                {
+                    Key = dp.ID + ":VDIFF",
+                    DisplayName = dp.ID + " Voltage Drop",
+                    OwnerId = dp.ID,
+                    Kind = GraphSourceKind.DiffProbe,
+                    Unit = XYGraphView.AxisUnit.Volts,
+                    VarId1 = v1,
+                    VarId2 = v2,
+                    Invert = false,
+                    PreferredColour = dp.ProbeColour
+                });
+            }
+
+            foreach (CurrentProbe cp in circuit.Components.OfType<CurrentProbe>())
+            {
+                cp.BindTarget(circuit);
+                Component target = circuit.Components.FirstOrDefault(c => c.ID == cp.TargetComponentId);
+                if (target == null) continue;
+
+                int simPinTarget = GetSimulationPinNumber(target, cp.TargetPinNumber);
+                int varId = CurrentSimulator.GetComponentPinCurrentVarId(cp.TargetComponentId, simPinTarget);
+                if (varId < 0) continue;
+
+                sources.Add(new GraphSource
+                {
+                    Key = cp.ID + ":I",
+                    DisplayName = cp.ID + " Current",
+                    OwnerId = cp.ID,
+                    Kind = GraphSourceKind.CurrentProbe,
+                    Unit = XYGraphView.AxisUnit.Amps,
+                    VarId1 = varId,
+                    VarId2 = -1,
+                    Invert = false,
+                    PreferredColour = cp.ProbeColour
+                });
+            }
+
+            foreach (XYProbe xp in circuit.Components.OfType<XYProbe>())
+            {
+                int inId = xp.ConnectedNets.ContainsKey(1) ? CurrentSimulator.GetNetVoltageVarId(xp.ConnectedNets[1]) : -1;
+                if (inId >= 0)
+                {
+                    sources.Add(new GraphSource
+                    {
+                        Key = xp.ID + ":VIN",
+                        DisplayName = xp.ID + " Vin",
+                        OwnerId = xp.ID,
+                        Kind = GraphSourceKind.XYProbeInput,
+                        Unit = XYGraphView.AxisUnit.Volts,
+                        VarId1 = inId,
+                        VarId2 = -1,
+                        Invert = false,
+                        PreferredColour = xp.ProbeColour
+                    });
+                }
+
+                int outId = xp.ConnectedNets.ContainsKey(2) ? CurrentSimulator.GetNetVoltageVarId(xp.ConnectedNets[2]) : -1;
+                if (outId >= 0)
+                {
+                    sources.Add(new GraphSource
+                    {
+                        Key = xp.ID + ":VOUT",
+                        DisplayName = xp.ID + " Vout",
+                        OwnerId = xp.ID,
+                        Kind = GraphSourceKind.XYProbeOutput,
+                        Unit = XYGraphView.AxisUnit.Volts,
+                        VarId1 = outId,
+                        VarId2 = -1,
+                        Invert = false,
+                        PreferredColour = xp.ProbeColour
+                    });
+                }
+            }
+
+            foreach (IVProbe ivp in circuit.Components.OfType<IVProbe>())
+            {
+                ivp.BindTarget(circuit);
+                Component target = circuit.Components.FirstOrDefault(c => c.ID == ivp.TargetComponentId);
+                if (target == null) continue;
+
+                int v1Id = target.ConnectedNets.ContainsKey(1) ? CurrentSimulator.GetNetVoltageVarId(target.ConnectedNets[1]) : -1;
+                int v2Id = target.ConnectedNets.ContainsKey(2) ? CurrentSimulator.GetNetVoltageVarId(target.ConnectedNets[2]) : -1;
+                if (v1Id >= 0 && v2Id >= 0)
+                {
+                    sources.Add(new GraphSource
+                    {
+                        Key = ivp.ID + ":VDROP",
+                        DisplayName = ivp.ID + " Voltage Drop",
+                        OwnerId = ivp.ID,
+                        Kind = GraphSourceKind.IVProbeVoltage,
+                        Unit = XYGraphView.AxisUnit.Volts,
+                        VarId1 = v1Id,
+                        VarId2 = v2Id,
+                        Invert = false,
+                        PreferredColour = ivp.ProbeColour
+                    });
+                }
+
+                int simPinTarget = GetSimulationPinNumber(target, ivp.TargetPinNumber);
+                int iId = CurrentSimulator.GetComponentPinCurrentVarId(ivp.TargetComponentId, simPinTarget);
+                if (iId >= 0)
+                {
+                    sources.Add(new GraphSource
+                    {
+                        Key = ivp.ID + ":I",
+                        DisplayName = ivp.ID + " Current",
+                        OwnerId = ivp.ID,
+                        Kind = GraphSourceKind.IVProbeCurrent,
+                        Unit = XYGraphView.AxisUnit.Amps,
+                        VarId1 = iId,
+                        VarId2 = -1,
+                        Invert = ivp.TargetPinNumber == 2,
+                        PreferredColour = ivp.ProbeColour
+                    });
+                }
+            }
+
+            return sources;
+        }
+
+        private XYGraphView.GraphSourceOption CreateGraphSourceOption(GraphSource source)
+        {
+            return new XYGraphView.GraphSourceOption
+            {
+                Key = source.Key,
+                DisplayName = source.DisplayName,
+                Unit = source.Unit,
+                VarId1 = source.VarId1,
+                VarId2 = source.VarId2,
+                Invert = source.Invert,
+                SourceBrush = source.PreferredColour != null && source.PreferredColour != Brushes.Transparent
+                    ? source.PreferredColour
+                    : Brushes.Black
+            };
+        }
+
+        private int GetSimulationPinNumber(Component targetComp, int physicalPinNumber)
+        {
+            int simPinTarget = physicalPinNumber;
+            if (targetComp == null) return simPinTarget;
+
+            string componentType = targetComp.ComponentType == null ? "" : targetComp.ComponentType.ToLower();
+            string componentModel = targetComp.ComponentModel == null ? "" : targetComp.ComponentModel.ToLower();
+
+            if (componentType.Contains("transistor") && !componentType.Contains("mosfet"))
+            {
+                if (componentModel.Contains("bc639"))
+                {
+                    if (physicalPinNumber == 1) simPinTarget = 3;
+                    else if (physicalPinNumber == 2) simPinTarget = 1;
+                    else if (physicalPinNumber == 3) simPinTarget = 2;
+                }
+                else if (componentModel.Contains("bc337") || componentModel.Contains("bc327"))
+                {
+                    simPinTarget = physicalPinNumber;
+                }
+                else
+                {
+                    if (physicalPinNumber == 1) simPinTarget = 3;
+                    else if (physicalPinNumber == 2) simPinTarget = 2;
+                    else if (physicalPinNumber == 3) simPinTarget = 1;
+                }
+            }
+            else if (componentType.Contains("mosfet"))
+            {
+                if (componentModel.Contains("irf530"))
+                {
+                    if (physicalPinNumber == 1) simPinTarget = 2;
+                    else if (physicalPinNumber == 2) simPinTarget = 3;
+                    else if (physicalPinNumber == 3) simPinTarget = 1;
+                }
+                else
+                {
+                    simPinTarget = physicalPinNumber;
+                }
+            }
+
+            return simPinTarget;
         }
 
         //Populate a TreeViewItem with items following a preferred value series that represent a given component; between the magnitudes specified by magBegin and magEnd
@@ -1822,6 +2126,25 @@ else
             }
         }
 
+        private void ExportNetlist_Executed(object sender, ExecutedRoutedEventArgs e)
+        {
+            Microsoft.Win32.SaveFileDialog saveDialog = new Microsoft.Win32.SaveFileDialog();
+            saveDialog.Filter = "Netlist Files (.net)|*.net|Text Files (.txt)|*.txt|All Files (*.*)|*.*";
+            saveDialog.DefaultExt = ".net";
+            saveDialog.FileName = LastOpenedFile != null
+                ? System.IO.Path.GetFileNameWithoutExtension(LastOpenedFile)
+                : "Untitled";
+
+            if (LastOpenedFile != null)
+                saveDialog.InitialDirectory = System.IO.Path.GetDirectoryName(LastOpenedFile);
+
+            if (saveDialog.ShowDialog() == true)
+            {
+                System.IO.File.WriteAllText(saveDialog.FileName, circuit.GetNetlist());
+                StatusText.Text = "Netlist exported";
+            }
+        }
+
         private void StopSimulation_Executed(object sender, ExecutedRoutedEventArgs e)
         {
             isManuallyStopped = true;
@@ -1892,6 +2215,7 @@ else
             new InputGestureCollection { new KeyGesture(Key.F6) });
         public static readonly RoutedUICommand ShowHideGraph = new RoutedUICommand("Show/Hide Graph", "ShowHideGraph", typeof(MainWindow),
             new InputGestureCollection { new KeyGesture(Key.G, ModifierKeys.Control) });
+        public static readonly RoutedUICommand ExportNetlist = new RoutedUICommand("Export Netlist", "ExportNetlist", typeof(MainWindow));
 
         //Tool selection commands
         public static readonly RoutedUICommand SelectToolSELECT = new RoutedUICommand("Select", "SelectToolSELECT", typeof(MainWindow),

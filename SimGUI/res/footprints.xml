@@ -350,6 +350,8 @@
     <path name="icon_sine" linecolour="#FF00E5FF" thickness="0.035">M -0.5,1.75 Q -0.375,1.55 -0.25,1.75 T 0,1.75</path>
     <path name="icon_square" linecolour="#FF00E5FF" thickness="0.035">M -0.5,1.85 L -0.5,1.6 L -0.25,1.6 L -0.25,1.85 L 0,1.85</path>
     <path name="icon_triangle" linecolour="#FF00E5FF" thickness="0.035">M -0.5,1.85 L -0.25,1.55 L 0,1.85</path>
+    <path name="icon_ramp" linecolour="#FF00E5FF" thickness="0.035">M -0.5,1.85 L 0,1.55</path>
+    <path name="icon_staircase" linecolour="#FF00E5FF" thickness="0.035">M -0.5,1.85 L -0.5,1.75 L -0.35,1.75 L -0.35,1.65 L -0.2,1.65 L -0.2,1.55 L 0,1.55</path>
     
     <path name="icon_dc1" linecolour="#FF00E5FF" thickness="0.035">M -0.5,1.65 L 0,1.65</path>
     <path name="icon_dc2" linecolour="#FF00E5FF" thickness="0.035">M -0.5,1.8 L -0.3,1.8 M -0.1,1.8 L 0.1,1.8</path>

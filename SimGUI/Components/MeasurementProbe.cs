@@ -17,6 +17,8 @@ namespace SimGUI
 {
     class Probe : Component
     {
+        public Brush ProbeColour = Brushes.Transparent;
+
         public Probe(Circuit parent, Point origin)
             : base(parent, origin)
         {
@@ -30,8 +32,29 @@ namespace SimGUI
             return "";
         }
 
+        protected override bool SetupPropertiesDialog(ComponentProperties dialog)
+        {
+            dialog.AddColorSelection(ProbeColour);
+            return true;
+        }
+
+        protected override void AfterPropertiesDialog(ComponentProperties dialog)
+        {
+            if (dialog.ColorSelectionBox != null && dialog.ColorSelectionBox.SelectedItem != null)
+            {
+                var selectedPair = (KeyValuePair<string, Brush>)dialog.ColorSelectionBox.SelectedItem;
+                SetProbeColour(selectedPair.Value);
+
+                if (ParentCircuit.ParentWindow.CurrentGraph != null)
+                {
+                    ParentCircuit.ParentWindow.CurrentGraph.UpdateTraceMapping(ID, -1, -1, ProbeColour);
+                }
+            }
+        }
+
         public void SetProbeColour(Brush b)
         {
+            ProbeColour = b;
             foreach (Path p in Children.OfType<Path>())
             {
                 if (p.Name == "ProbeBody")
